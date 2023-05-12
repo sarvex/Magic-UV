@@ -24,14 +24,7 @@ def _is_valid_context(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if len(objs) != 1 else context.object.mode == 'EDIT'
 
 
 def _get_uv_layer(ops_obj, bm):
@@ -39,9 +32,7 @@ def _get_uv_layer(ops_obj, bm):
     if not bm.loops.layers.uv:
         ops_obj.report({'WARNING'}, "Object must have more than one UV map")
         return None
-    uv_layer = bm.loops.layers.uv.verify()
-
-    return uv_layer
+    return bm.loops.layers.uv.verify()
 
 
 def _main_parse(ops_obj, uv_layer, sel_faces, active_face, active_face_nor):
@@ -52,12 +43,11 @@ def _main_parse(ops_obj, uv_layer, sel_faces, active_face, active_face_nor):
 
     faces_to_parse = []
 
-    # get shared edge of two faces
-    cross_edges = []
-    for edge in active_face.edges:
-        if edge in sel_faces[0].edges and edge in sel_faces[1].edges:
-            cross_edges.append(edge)
-
+    cross_edges = [
+        edge
+        for edge in active_face.edges
+        if edge in sel_faces[0].edges and edge in sel_faces[1].edges
+    ]
     # parse two selected faces
     if cross_edges and len(cross_edges) == 1:
         shared_edge = cross_edges[0]
@@ -97,10 +87,7 @@ def _main_parse(ops_obj, uv_layer, sel_faces, active_face, active_face_nor):
         used_verts.update(second_face.verts)
         used_edges.update(second_face.edges)
 
-        # first Grow
-        faces_to_parse.append(active_face)
-        faces_to_parse.append(second_face)
-
+        faces_to_parse.extend((active_face, second_face))
     else:
         ops_obj.report({'WARNING'}, "Two faces should share one edge")
         return None
@@ -130,8 +117,7 @@ def _parse_faces(check_face, face_stuff, used_verts, used_edges,
 
     new_shared_faces = []
     for sorted_edge in face_stuff[1]:
-        shared_faces = sorted_edge.link_faces
-        if shared_faces:
+        if shared_faces := sorted_edge.link_faces:
             if len(shared_faces) > 2:
                 bpy.ops.mesh.select_all(action='DESELECT')
                 for face_sel in shared_faces:
@@ -139,9 +125,9 @@ def _parse_faces(check_face, face_stuff, used_verts, used_edges,
                 shared_faces = []
                 return None
 
-            clear_shared_faces = _get_new_shared_faces(
-                check_face, sorted_edge, shared_faces, all_sorted_faces.keys())
-            if clear_shared_faces:
+            if clear_shared_faces := _get_new_shared_faces(
+                check_face, sorted_edge, shared_faces, all_sorted_faces.keys()
+            ):
                 shared_face = clear_shared_faces[0]
                 # get vertices of the edge
                 vert1 = sorted_edge.verts[0]
@@ -200,7 +186,7 @@ def _get_other_verts_edges(face, vert1, vert2, first_edge, uv_layer):
 
                 found_edge = edge
                 if found_edge not in face_edges:
-                    face_edges.append(edge)
+                    face_edges.append(found_edge)
                 break
 
         other_edges.remove(found_edge)
@@ -230,20 +216,20 @@ def _get_selected_src_faces(ops_obj, bm, uv_layer):
 
     # parse all faces according to selection
     active_face_nor = active_face.normal.copy()
-    all_sorted_faces = _main_parse(ops_obj, uv_layer, sel_faces, active_face,
-                                   active_face_nor)
-
-    if all_sorted_faces:
-        for face_data in all_sorted_faces.values():
-            edges = face_data[1]
-            uv_loops = face_data[2]
-            uvs = [l.uv.copy() for l in uv_loops]
-            pin_uvs = [l.pin_uv for l in uv_loops]
-            seams = [e.seam for e in edges]
-            topology_copied.append([uvs, pin_uvs, seams])
-    else:
+    if not (
+        all_sorted_faces := _main_parse(
+            ops_obj, uv_layer, sel_faces, active_face, active_face_nor
+        )
+    ):
         return None
 
+    for face_data in all_sorted_faces.values():
+        edges = face_data[1]
+        uv_loops = face_data[2]
+        uvs = [l.uv.copy() for l in uv_loops]
+        pin_uvs = [l.pin_uv for l in uv_loops]
+        seams = [e.seam for e in edges]
+        topology_copied.append([uvs, pin_uvs, seams])
     return topology_copied
 
 
@@ -266,37 +252,37 @@ def _paste_uv(ops_obj, bm, uv_layer, src_faces, invert_normals, copy_seams):
         active_face_nor = active_face.normal.copy()
         if invert_normals:
             active_face_nor.negate()
-        all_sorted_faces = _main_parse(ops_obj, uv_layer, sel_faces,
-                                       active_face, active_face_nor)
-
-        if all_sorted_faces:
-            # check amount of copied/pasted faces
-            if len(all_sorted_faces) != len(src_faces):
-                ops_obj.report({'WARNING'},
-                               "Mesh has different amount of faces")
-                return -1
-
-            for j, face_data in enumerate(all_sorted_faces.values()):
-                copied_data = src_faces[j]
-
-                # check amount of copied/pasted verts
-                if len(copied_data[0]) != len(face_data[2]):
-                    bpy.ops.mesh.select_all(action='DESELECT')
-                    # select problematic face
-                    list(all_sorted_faces.keys())[j].select = True
-                    ops_obj.report({'WARNING'},
-                                   "Face have different amount of vertices")
-                    return 0
-
-                for k, (edge, uvloop) in enumerate(zip(face_data[1],
-                                                       face_data[2])):
-                    uvloop.uv = copied_data[0][k]
-                    uvloop.pin_uv = copied_data[1][k]
-                    if copy_seams:
-                        edge.seam = copied_data[2][k]
-        else:
+        if not (
+            all_sorted_faces := _main_parse(
+                ops_obj, uv_layer, sel_faces, active_face, active_face_nor
+            )
+        ):
             return -1
 
+        # check amount of copied/pasted faces
+        if len(all_sorted_faces) != len(src_faces):
+            ops_obj.report({'WARNING'},
+                           "Mesh has different amount of faces")
+            return -1
+
+        for j, face_data in enumerate(all_sorted_faces.values()):
+            copied_data = src_faces[j]
+
+            # check amount of copied/pasted verts
+            if len(copied_data[0]) != len(face_data[2]):
+                bpy.ops.mesh.select_all(action='DESELECT')
+                # select problematic face
+                list(all_sorted_faces.keys())[j].select = True
+                ops_obj.report({'WARNING'},
+                               "Face have different amount of vertices")
+                return 0
+
+            for k, (edge, uvloop) in enumerate(zip(face_data[1],
+                                                   face_data[2])):
+                uvloop.uv = copied_data[0][k]
+                uvloop.pin_uv = copied_data[1][k]
+                if copy_seams:
+                    edge.seam = copied_data[2][k]
     return 0
 
 
@@ -349,9 +335,7 @@ class MUV_OT_TransferUV_CopyUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.transfer_uv
@@ -408,9 +392,7 @@ class MUV_OT_TransferUV_PasteUV(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.transfer_uv
-        if not props.topology_copied:
-            return False
-        return _is_valid_context(context)
+        return False if not props.topology_copied else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.transfer_uv
@@ -427,15 +409,19 @@ class MUV_OT_TransferUV_PasteUV(bpy.types.Operator):
         if uv_layer is None:
             return {'CANCELLED'}
 
-        ret = _paste_uv(self, bm, uv_layer, props.topology_copied,
-                        self.invert_normals, self.copy_seams)
-        if ret:
+        if ret := _paste_uv(
+            self,
+            bm,
+            uv_layer,
+            props.topology_copied,
+            self.invert_normals,
+            self.copy_seams,
+        ):
             return {'CANCELLED'}
 
         bmesh.update_edit_mesh(obj.data)
 
-        if compat.check_version(2, 80, 0) < 0:
-            if self.copy_seams:
-                obj.data.show_edge_seams = True
+        if compat.check_version(2, 80, 0) < 0 and self.copy_seams:
+            obj.data.show_edge_seams = True
 
         return {'FINISHED'}

@@ -26,14 +26,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _is_vector_similar(v1, v2, error):
@@ -162,20 +155,13 @@ class MUV_OT_MirrorUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def _get_world_vertices(self, obj, bm):
         # Get world orientation matrix.
         world_orientation_mat = obj.matrix_world
 
-        # Move to local to world.
-        transformed = {}
-        for v in bm.verts:
-            transformed[v] = compat.matmul(world_orientation_mat, v.co)
-
-        return transformed
+        return {v: compat.matmul(world_orientation_mat, v.co) for v in bm.verts}
 
     def _get_global_vertices(self, obj, bm):
         # Get world rotation matrix.
@@ -223,9 +209,7 @@ class MUV_OT_MirrorUV(bpy.types.Operator):
             if common.check_version(2, 73, 0) >= 0:
                 bm.faces.ensure_lookup_table()
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
 

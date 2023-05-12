@@ -37,10 +37,7 @@ def _is_valid_context(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    return True
+    return len(objs) == 1
 
 
 @PropertyClassRegistry()
@@ -92,9 +89,7 @@ class MUV_OT_CopyPasteUVObject_CopyUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     @memorize_view_3d_mode
     def execute(self, context):
@@ -117,8 +112,7 @@ class MUV_OT_CopyPasteUVObject_CopyUV(bpy.types.Operator):
             return {'CANCELLED'}
         props.src_info = src_info
 
-        self.report({'INFO'},
-                    "{}'s UV coordinates are copied".format(obj.name))
+        self.report({'INFO'}, f"{obj.name}'s UV coordinates are copied")
 
         return {'FINISHED'}
 
@@ -145,10 +139,7 @@ class MUV_MT_CopyPasteUVObject_CopyUV(bpy.types.Menu):
 
         # create sub menu
         uv_layers = compat.get_object_uv_layers(obj)
-        uv_maps = []
-        if uv_layers is not None:
-            uv_maps = uv_layers.keys()
-
+        uv_maps = uv_layers.keys() if uv_layers is not None else []
         ops = layout.operator(MUV_OT_CopyPasteUVObject_CopyUV.bl_idname,
                               text="[Default]")
         ops.uv_map = "__default"
@@ -189,9 +180,7 @@ class MUV_OT_CopyPasteUVObject_PasteUV(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.copy_paste_uv_object
-        if not props.src_info:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_info else _is_valid_context(context)
 
     @memorize_view_3d_mode
     def execute(self, context):
@@ -224,20 +213,25 @@ class MUV_OT_CopyPasteUVObject_PasteUV(bpy.types.Operator):
             if dest_info is None:
                 return {'CANCELLED'}
 
-            # paste
-            ret = paste_uv(self, bm, props.src_info, dest_info, uv_layers,
-                           'N_N', 0, 0, self.copy_seams)
-            if ret:
+            if ret := paste_uv(
+                self,
+                bm,
+                props.src_info,
+                dest_info,
+                uv_layers,
+                'N_N',
+                0,
+                0,
+                self.copy_seams,
+            ):
                 return {'CANCELLED'}
 
             bmesh.update_edit_mesh(obj.data)
 
-            if compat.check_version(2, 80, 0) < 0:
-                if self.copy_seams is True:
-                    obj.data.show_edge_seams = True
+            if compat.check_version(2, 80, 0) < 0 and self.copy_seams is True:
+                obj.data.show_edge_seams = True
 
-            self.report(
-                {'INFO'}, "{}'s UV coordinates are pasted".format(obj.name))
+            self.report({'INFO'}, f"{obj.name}'s UV coordinates are pasted")
 
         return {'FINISHED'}
 
@@ -256,9 +250,7 @@ class MUV_MT_CopyPasteUVObject_PasteUV(bpy.types.Menu):
     def poll(cls, context):
         sc = context.scene
         props = sc.muv_props.copy_paste_uv_object
-        if not props.src_info:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_info else _is_valid_context(context)
 
     def draw(self, context):
         sc = context.scene

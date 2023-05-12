@@ -24,23 +24,12 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _get_uv_layer(bm):
     # get UV layer
-    if not bm.loops.layers.uv:
-        return None
-    uv_layer = bm.loops.layers.uv.verify()
-
-    return uv_layer
+    return None if not bm.loops.layers.uv else bm.loops.layers.uv.verify()
 
 
 def _get_src_face_info(bm, uv_layers, only_select=False):
@@ -71,20 +60,20 @@ def _paste_uv(bm, src_info, dest_info, uv_layers, strategy, flip,
 
         for idx, dinfo in enumerate(dest_faces):
             sinfo = None
-            if strategy == 'N_N':
-                sinfo = src_faces[idx]
-            elif strategy == 'N_M':
+            if strategy == 'N_M':
                 sinfo = src_faces[idx % len(src_faces)]
 
+            elif strategy == 'N_N':
+                sinfo = src_faces[idx]
             suv = sinfo["uvs"]
             spuv = sinfo["pin_uvs"]
             ss = sinfo["seams"]
-            if len(sinfo["uvs"]) != len(dinfo["uvs"]):
+            if len(suv) != len(dinfo["uvs"]):
                 return -1
 
-            suvs_fr = [uv for uv in suv]
-            spuvs_fr = [pin_uv for pin_uv in spuv]
-            ss_fr = [s for s in ss]
+            suvs_fr = list(suv)
+            spuvs_fr = list(spuv)
+            ss_fr = list(ss)
 
             # flip UVs
             if flip is True:
@@ -167,9 +156,7 @@ class MUV_OT_FlipRotateUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         self.report({'INFO'}, "Flip/Rotate UV")
@@ -184,9 +171,7 @@ class MUV_OT_FlipRotateUV(bpy.types.Operator):
             # get UV layer
             uv_layer = _get_uv_layer(bm)
             if not uv_layer:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
 
             # get selected face
@@ -194,26 +179,28 @@ class MUV_OT_FlipRotateUV(bpy.types.Operator):
             if not src_info:
                 continue
 
-            # paste
-            ret = _paste_uv(bm, src_info, src_info, [uv_layer], 'N_N',
-                            self.flip, self.rotate, self.seams)
-            if ret:
-                self.report({'WARNING'},
-                            "Some Object {}'s faces are different size"
-                            .format(obj.name))
+            if ret := _paste_uv(
+                bm,
+                src_info,
+                src_info,
+                [uv_layer],
+                'N_N',
+                self.flip,
+                self.rotate,
+                self.seams,
+            ):
+                self.report({'WARNING'}, f"Some Object {obj.name}'s faces are different size")
                 return {'CANCELLED'}
 
             bmesh.update_edit_mesh(obj.data)
-            if compat.check_version(2, 80, 0) < 0:
-                if self.seams is True:
-                    obj.data.show_edge_seams = True
+            if compat.check_version(2, 80, 0) < 0 and self.seams is True:
+                obj.data.show_edge_seams = True
 
             face_count += len(src_info[list(src_info.keys())[0]])
 
         if face_count == 0:
             self.report({'WARNING'}, "No faces are selected")
             return {'CANCELLED'}
-        self.report({'INFO'},
-                    "{} face(s) are fliped/rotated".format(face_count))
+        self.report({'INFO'}, f"{face_count} face(s) are fliped/rotated")
 
         return {'FINISHED'}

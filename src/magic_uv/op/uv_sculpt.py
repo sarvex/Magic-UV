@@ -33,14 +33,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _get_strength(p, len_, factor):
@@ -49,10 +42,7 @@ def _get_strength(p, len_, factor):
     if p > len_:
         return 0.0
 
-    if p < 0.0:
-        return f
-
-    return (len_ - p) * f / len_
+    return f if p < 0.0 else (len_ - p) * f / len_
 
 
 @PropertyClassRegistry()
@@ -171,9 +161,7 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return False
-        return _is_valid_context(context)
+        return False if common.is_console_mode() else _is_valid_context(context)
 
     @classmethod
     def is_running(cls, _):
@@ -326,7 +314,7 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
                 loc, _, fidx, _ = tree.ray_cast(ray_orig_obj, ray_dir_obj)
                 if not loc:
                     return
-                loops = [l for l in bm.faces[fidx].loops]
+                loops = list(bm.faces[fidx].loops)
                 uvs = [Vector((l[uv_layer].uv.x, l[uv_layer].uv.y, 0.0))
                        for l in loops]
                 target_uv = barycentric_transform(
@@ -340,10 +328,10 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
                     l = bm.faces[info["face_idx"]].loops[info["loop_idx"]]
                     if sc.muv_uv_sculpt_pinch_invert:
                         diff_uv = \
-                            (l[uv_layer].uv - target_uv) * info["strength"]
+                                (l[uv_layer].uv - target_uv) * info["strength"]
                     else:
                         diff_uv = \
-                            (target_uv - l[uv_layer].uv) * info["strength"]
+                                (target_uv - l[uv_layer].uv) * info["strength"]
                     l[uv_layer].uv = l[uv_layer].uv + diff_uv / 10.0
 
             elif sc.muv_uv_sculpt_tools == 'RELAX':
@@ -360,8 +348,7 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
                             vert_db[l.vert] = {"loops": [l]}
 
                 # get relaxation information
-                for k in vert_db.keys():
-                    d = vert_db[k]
+                for k, d in vert_db.items():
                     d["uv_sum"] = Vector((0.0, 0.0))
                     d["uv_count"] = 0
 
@@ -370,10 +357,10 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
                         lp = l.link_loop_prev
                         d["uv_sum"] = d["uv_sum"] + ln[uv_layer].uv
                         d["uv_sum"] = d["uv_sum"] + lp[uv_layer].uv
-                        d["uv_count"] = d["uv_count"] + 2
+                        d["uv_count"] += 2
                     d["uv_p"] = d["uv_sum"] / d["uv_count"]
                     d["uv_b"] = d["uv_p"] - d["loops"][0][uv_layer].uv
-                for k in vert_db.keys():
+                for k in vert_db:
                     d = vert_db[k]
                     d["uv_sum_b"] = Vector((0.0, 0.0))
                     for l in d["loops"]:
@@ -402,7 +389,7 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
                         base = (1.0 - strength) * l[uv_layer].uv
                         if sc.muv_uv_sculpt_relax_method == 'HC':
                             t = 0.5 * \
-                                (db["uv_b"] + db["uv_sum_b"] / d["uv_count"])
+                                    (db["uv_b"] + db["uv_sum_b"] / d["uv_count"])
                             diff = strength * (db["uv_p"] - t)
                             target_uv = base + diff
                         elif sc.muv_uv_sculpt_relax_method == 'LAPLACIAN':
@@ -422,9 +409,9 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
         for obj in objs:
             bm = bmesh.from_edit_mesh(obj.data)
             uv_layer = bm.loops.layers.uv.verify()
-            mco = self.current_mco
-
             if sc.muv_uv_sculpt_tools == 'GRAB':
+                mco = self.current_mco
+
                 for info in self.__loop_info[obj]:
                     diff_uv = (mco - self.__initial_mco) * info["strength"]
                     l = bm.faces[info["face_idx"]].loops[info["loop_idx"]]
@@ -449,7 +436,7 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
             'TOOL_PROPS',
         ]
         if not common.mouse_on_area(event, 'VIEW_3D') or \
-           common.mouse_on_regions(event, 'VIEW_3D', region_types):
+               common.mouse_on_regions(event, 'VIEW_3D', region_types):
             return {'PASS_THROUGH'}
 
         if event.type == 'LEFTMOUSE':
@@ -462,15 +449,10 @@ class MUV_OT_UVSculpt(bpy.types.Operator):
                     self.__stroke_exit(context, event)
                 self.__stroking = False
             return {'RUNNING_MODAL'}
-        elif event.type == 'MOUSEMOVE':
+        elif event.type in ['MOUSEMOVE', 'TIMER']:
             if self.__stroking:
                 self.__stroke_apply(context, event)
             return {'RUNNING_MODAL'}
-        elif event.type == 'TIMER':
-            if self.__stroking:
-                self.__stroke_apply(context, event)
-            return {'RUNNING_MODAL'}
-
         return {'PASS_THROUGH'}
 
     def invoke(self, context, _):

@@ -23,14 +23,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -113,9 +106,7 @@ class MUV_OT_SelectUV_SelectOverlapped(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     @staticmethod
     def setup_argument(ops, scene):
@@ -136,7 +127,7 @@ class MUV_OT_SelectUV_SelectOverlapped(bpy.types.Operator):
             uv_layer = bm.loops.layers.uv.verify()
 
             if context.tool_settings.use_uv_select_sync:
-                sel_faces = [f for f in bm.faces]
+                sel_faces = list(bm.faces)
             else:
                 sel_faces = [f for f in bm.faces if f.select]
             bm_list.append(bm)
@@ -206,9 +197,7 @@ class MUV_OT_SelectUV_SelectFlipped(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     @staticmethod
     def setup_argument(ops, scene):
@@ -228,7 +217,7 @@ class MUV_OT_SelectUV_SelectFlipped(bpy.types.Operator):
             uv_layer = bm.loops.layers.uv.verify()
 
             if context.tool_settings.use_uv_select_sync:
-                sel_faces = [f for f in bm.faces]
+                sel_faces = list(bm.faces)
             else:
                 sel_faces = [f for f in bm.faces if f.select]
             bm_list.append(bm)
@@ -280,9 +269,7 @@ class MUV_OT_SelectUV_ZoomSelectedUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def _get_override_context(self, context):
         for window in context.window_manager.windows:

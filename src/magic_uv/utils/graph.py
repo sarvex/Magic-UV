@@ -26,14 +26,10 @@ class Edge:
 
     def other(self, node):
         if self.node_1 == node and self.node_2 == node:
-            raise RuntimeError("Loop edge in {} is not supported."
-                               .format(node.key))
+            raise RuntimeError(f"Loop edge in {node.key} is not supported.")
         if node not in (self.node_1, self.node_2):
-            raise RuntimeError("Node {} does not belong this edge."
-                               .format(node.key))
-        if self.node_1 == node:
-            return self.node_2
-        return self.node_1
+            raise RuntimeError(f"Node {node.key} does not belong this edge.")
+        return self.node_2 if self.node_1 == node else self.node_1
 
 
 class Graph:
@@ -43,17 +39,14 @@ class Graph:
 
     def add_node(self, node):
         if node.key in self.nodes:
-            raise RuntimeError("Node '{}' is already registered."
-                               .format(node.key))
+            raise RuntimeError(f"Node '{node.key}' is already registered.")
         self.nodes[node.key] = node
 
     def add_edge(self, node_1, node_2):
         if node_1.key not in self.nodes:
-            raise RuntimeError("Node '{}' is not registered."
-                               .format(node_1.key))
+            raise RuntimeError(f"Node '{node_1.key}' is not registered.")
         if node_2.key not in self.nodes:
-            raise RuntimeError("Node '{}' is not registered."
-                               .format(node_2.key))
+            raise RuntimeError(f"Node '{node_2.key}' is not registered.")
 
         edge = Edge(node_1, node_2)
         self.edges.append(edge)
@@ -67,11 +60,11 @@ class Graph:
 def dump_graph(graph):
     print("=== Node ===")
     for _, node in graph.nodes.items():
-        print("Key: {}, Value {}".format(node.key, node.value))
+        print(f"Key: {node.key}, Value {node.value}")
 
     print("=== Edge ===")
     for edge in graph.edges:
-        print("{} - {}".format(edge.node_1.key, edge.node_2.key))
+        print(f"{edge.node_1.key} - {edge.node_2.key}")
 
 
 # VF2 algorithm

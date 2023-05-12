@@ -23,10 +23,14 @@ def _get_vco(verts_orig, loop):
     """
     Get vertex original coordinate from loop
     """
-    for vo in verts_orig:
-        if vo["vidx"] == loop.vert.index and vo["moved"] is False:
-            return vo["vco"]
-    return loop.vert.co
+    return next(
+        (
+            vo["vco"]
+            for vo in verts_orig
+            if vo["vidx"] == loop.vert.index and vo["moved"] is False
+        ),
+        loop.vert.co,
+    )
 
 
 def _get_link_loops(vert):
@@ -40,11 +44,12 @@ def _get_link_loops(vert):
             # self loop
             if loop.vert == vert:
                 l = loop
-            # linked loop
             else:
-                for e in loop.vert.link_edges:
-                    if e.other_vert(loop.vert) == vert:
-                        adj_loops.append(loop)
+                adj_loops.extend(
+                    loop
+                    for e in loop.vert.link_edges
+                    if e.other_vert(loop.vert) == vert
+                )
         if len(adj_loops) < 2:
             return None
 
@@ -133,10 +138,11 @@ def _get_target_uv(link_loop, uv_layer, verts_orig, v, ini_geom):
     u1u = tuv0 - uv1
     dir0 = u0u1.cross(u0u) > 0
     dir1 = u0u1.cross(u1u) > 0
-    if (ini_geom["dir0"] != dir0) or (ini_geom["dir1"] != dir1):
-        return tuv1
-
-    return tuv0
+    return (
+        tuv1
+        if (ini_geom["dir0"] != dir0) or (ini_geom["dir1"] != dir1)
+        else tuv0
+    )
 
 
 def _calc_tri_vert(v0, v1, angle0, angle1):
@@ -175,14 +181,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -245,17 +244,13 @@ class MUV_OT_TextureLock_Lock(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     @classmethod
     def is_ready(cls, context):
         sc = context.scene
         props = sc.muv_props.texture_lock
-        if props.verts_orig:
-            return True
-        return False
+        return bool(props.verts_orig)
 
     def execute(self, context):
         props = context.scene.muv_props.texture_lock
@@ -270,9 +265,7 @@ class MUV_OT_TextureLock_Lock(bpy.types.Operator):
                 bm.faces.ensure_lookup_table()
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
 
             props.verts_orig[obj] = [
@@ -311,9 +304,7 @@ class MUV_OT_TextureLock_Unlock(bpy.types.Operator):
             return False
         if not MUV_OT_TextureLock_Lock.is_ready(context):
             return False
-        if not _is_valid_context(context):
-            return False
-        return True
+        return bool(_is_valid_context(context))
 
     def execute(self, context):
         sc = context.scene
@@ -335,9 +326,7 @@ class MUV_OT_TextureLock_Unlock(bpy.types.Operator):
                 bm.faces.ensure_lookup_table()
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
 
@@ -394,9 +383,7 @@ class MUV_OT_TextureLock_Intr(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return False
-        return _is_valid_context(context)
+        return False if common.is_console_mode() else _is_valid_context(context)
 
     @classmethod
     def is_running(cls, _):
@@ -471,9 +458,7 @@ class MUV_OT_TextureLock_Intr(bpy.types.Operator):
                 bm.faces.ensure_lookup_table()
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.data))
+                self.report({'WARNING'}, f"Object {obj.data} must have more than one UV map")
                 return
             uv_layer = bm.loops.layers.uv.verify()
 

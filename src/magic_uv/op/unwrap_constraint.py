@@ -25,14 +25,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -120,9 +113,7 @@ class MUV_OT_UnwrapConstraint(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         objs = common.get_uv_editable_objects(context)
@@ -135,9 +126,7 @@ class MUV_OT_UnwrapConstraint(bpy.types.Operator):
 
             # bpy.ops.uv.unwrap() makes one UV map at least
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
 

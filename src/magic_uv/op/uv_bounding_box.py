@@ -36,12 +36,7 @@ def _is_valid_context(context):
     # only edit mode is allowed to execute
     if obj is None:
         return False
-    if obj.type != 'MESH':
-        return False
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if obj.type != 'MESH' else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -272,15 +267,8 @@ class UniformScalingCommand(CommandBase):
 
         sr = tr / tir
 
-        if ((tx - tox) * (tix - tox)) > 0:
-            self.__dir_x = 1
-        else:
-            self.__dir_x = -1
-        if ((ty - toy) * (tiy - toy)) > 0:
-            self.__dir_y = 1
-        else:
-            self.__dir_y = -1
-
+        self.__dir_x = 1 if ((tx - tox) * (tix - tox)) > 0 else -1
+        self.__dir_y = 1 if ((ty - toy) * (tiy - toy)) > 0 else -1
         ms[0][0] = sr * self.__dir_x
         ms[1][1] = sr * self.__dir_y
 
@@ -322,9 +310,7 @@ class CommandExecuter:
         """
         get top of history
         """
-        if len(self.__cmd_list) <= 0:
-            return None
-        return self.__cmd_list[-1]
+        return None if len(self.__cmd_list) <= 0 else self.__cmd_list[-1]
 
     def append(self, cmd):
         """
@@ -350,9 +336,7 @@ class CommandExecuter:
         self.__cmd_list.append(self.__cmd_list_redo.pop())
 
     def pop(self):
-        if len(self.__cmd_list) <= 0:
-            return None
-        return self.__cmd_list.pop()
+        return None if len(self.__cmd_list) <= 0 else self.__cmd_list.pop()
 
     def push(self, cmd):
         self.__cmd_list.append(cmd)
@@ -412,25 +396,24 @@ class StateNone(StateBase):
         user_prefs = compat.get_user_preferences(context)
         prefs = user_prefs.addons["magic_uv"].preferences
         cp_react_size = prefs.uv_bounding_box_cp_react_size
-        is_uscaling = context.scene.muv_uv_bounding_box_uniform_scaling
         if (event.type == 'LEFTMOUSE') and (event.value == 'PRESS'):
             x, y = context.region.view2d.view_to_region(
                 mouse_view.x, mouse_view.y)
+            is_uscaling = context.scene.muv_uv_bounding_box_uniform_scaling
             for i, p in enumerate(ctrl_points):
                 px, py = context.region.view2d.view_to_region(p.x, p.y)
                 in_cp_x = px - cp_react_size < x < px + cp_react_size
                 in_cp_y = py - cp_react_size < y < py + cp_react_size
                 if in_cp_x and in_cp_y:
-                    if is_uscaling:
-                        arr = [1, 3, 6, 8]
-                        if i in arr:
-                            return (
-                                State.UNIFORM_SCALING_1 +
-                                arr.index(i)
-                            )
-                    else:
+                    if not is_uscaling:
                         return State.TRANSLATING + i
 
+                    arr = [1, 3, 6, 8]
+                    if i in arr:
+                        return (
+                            State.UNIFORM_SCALING_1 +
+                            arr.index(i)
+                        )
         return State.NONE
 
 
@@ -446,9 +429,8 @@ class StateTranslating(StateBase):
         self.__cmd_exec.append(TranslationCommand(ix, iy))
 
     def update(self, context, event, ctrl_points, mouse_view):
-        if event.type == 'LEFTMOUSE':
-            if event.value == 'RELEASE':
-                return State.NONE
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            return State.NONE
         if event.type == 'MOUSEMOVE':
             x, y = mouse_view.x, mouse_view.y
             self.__cmd_exec.top().set(x, y)
@@ -475,9 +457,8 @@ class StateScaling(StateBase):
             ScalingCommand(ix, iy, ox, oy, dir_x, dir_y, mat.inverted()))
 
     def update(self, context, event, ctrl_points, mouse_view):
-        if event.type == 'LEFTMOUSE':
-            if event.value == 'RELEASE':
-                return State.NONE
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            return State.NONE
         if event.type == 'MOUSEMOVE':
             x, y = mouse_view.x, mouse_view.y
             self.__cmd_exec.top().set(x, y)
@@ -503,9 +484,8 @@ class StateUniformScaling(StateBase):
             ix, iy, ox, oy, mat.inverted()))
 
     def update(self, context, event, ctrl_points, mouse_view):
-        if event.type == 'LEFTMOUSE':
-            if event.value == 'RELEASE':
-                return State.NONE
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            return State.NONE
         if event.type == 'MOUSEMOVE':
             x, y = mouse_view.x, mouse_view.y
             self.__cmd_exec.top().set(x, y)
@@ -526,9 +506,8 @@ class StateRotating(StateBase):
         self.__cmd_exec.append(RotationCommand(ix, iy, ox, oy))
 
     def update(self, context, event, ctrl_points, mouse_view):
-        if event.type == 'LEFTMOUSE':
-            if event.value == 'RELEASE':
-                return State.NONE
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            return State.NONE
         if event.type == 'MOUSEMOVE':
             x, y = mouse_view.x, mouse_view.y
             self.__cmd_exec.top().set(x, y)
@@ -606,9 +585,7 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return False
-        return _is_valid_context(context)
+        return False if common.is_console_mode() else _is_valid_context(context)
 
     @classmethod
     def is_running(cls, _):
@@ -696,12 +673,13 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
                 if not f.select:
                     continue
                 for l in f.loops:
-                    if sc.muv_uv_bounding_box_boundary == 'UV_SEL':
-                        if l[uv_layer].select:
-                            selection.add(l)
-                    elif sc.muv_uv_bounding_box_boundary == 'UV':
+                    if (
+                        sc.muv_uv_bounding_box_boundary != 'UV'
+                        and sc.muv_uv_bounding_box_boundary == 'UV_SEL'
+                        and l[uv_layer].select
+                        or sc.muv_uv_bounding_box_boundary == 'UV'
+                    ):
                         selection.add(l)
-
         return selection
 
     def __get_uv_info(self, context):
@@ -722,25 +700,20 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
             for f in bm.faces:
                 if not f.select:
                     continue
-                for i, l in enumerate(f.loops):
-                    if sc.muv_uv_bounding_box_boundary == 'UV_SEL':
-                        if l[uv_layer].select:
-                            uv_info.append({
-                                "bmesh": bm,
-                                "fidx": f.index,
-                                "lidx": i,
-                                "uv": l[uv_layer].uv.copy()
-                            })
-                    elif sc.muv_uv_bounding_box_boundary == 'UV':
-                        uv_info.append({
-                            "bmesh": bm,
-                            "fidx": f.index,
-                            "lidx": i,
-                            "uv": l[uv_layer].uv.copy()
-                        })
-        if not uv_info:
-            return None
-        return uv_info
+                uv_info.extend(
+                    {
+                        "bmesh": bm,
+                        "fidx": f.index,
+                        "lidx": i,
+                        "uv": l[uv_layer].uv.copy(),
+                    }
+                    for i, l in enumerate(f.loops)
+                    if sc.muv_uv_bounding_box_boundary != 'UV'
+                    and sc.muv_uv_bounding_box_boundary == 'UV_SEL'
+                    and l[uv_layer].select
+                    or sc.muv_uv_bounding_box_boundary == 'UV'
+                )
+        return None if not uv_info else uv_info
 
     def __get_ctrl_point(self, uv_info_ini):
         """
@@ -762,10 +735,8 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
             if uv.y > top:
                 top = uv.y
 
-        points = [
-            mathutils.Vector((
-                (left + right) * 0.5, (top + bottom) * 0.5, 0.0
-            )),
+        return [
+            mathutils.Vector(((left + right) * 0.5, (top + bottom) * 0.5, 0.0)),
             mathutils.Vector((left, top, 0.0)),
             mathutils.Vector((left, (top + bottom) * 0.5, 0.0)),
             mathutils.Vector((left, bottom, 0.0)),
@@ -774,10 +745,8 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
             mathutils.Vector((right, top, 0.0)),
             mathutils.Vector((right, (top + bottom) * 0.5, 0.0)),
             mathutils.Vector((right, bottom, 0.0)),
-            mathutils.Vector(((left + right) * 0.5, top + 0.03, 0.0))
+            mathutils.Vector(((left + right) * 0.5, top + 0.03, 0.0)),
         ]
-
-        return points
 
     def __update_uvs(self, context, uv_info_ini, trans_mat):
         """
@@ -822,7 +791,7 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
             'TOOLS',
         ]
         if not common.mouse_on_area(event, 'IMAGE_EDITOR') or \
-           common.mouse_on_regions(event, 'IMAGE_EDITOR', region_types):
+               common.mouse_on_regions(event, 'IMAGE_EDITOR', region_types):
             return {'PASS_THROUGH'}
 
         # Need refresh when bmesh is invalid, UVs are not selected and so on.
@@ -863,10 +832,7 @@ class MUV_OT_UVBoundingBox(bpy.types.Operator):
                 props.ctrl_points_ini, trans_mat)
 
         state = self.__state_mgr.update(context, props.ctrl_points, event)
-        if state == State.NONE:
-            return {'PASS_THROUGH'}
-
-        return {'RUNNING_MODAL'}
+        return {'PASS_THROUGH'} if state == State.NONE else {'RUNNING_MODAL'}
 
     def invoke(self, context, _):
         props = context.scene.muv_props.uv_bounding_box

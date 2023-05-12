@@ -27,14 +27,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def round_clip_uv_range(v):
@@ -48,9 +41,9 @@ def get_clip_uv_range_max(self):
 
 def set_clip_uv_range_max(self, value):
     u = round_clip_uv_range(value[0])
-    u = 0.5 if u <= 0.5 else u
+    u = max(u, 0.5)
     v = round_clip_uv_range(value[1])
-    v = 0.5 if v <= 0.5 else v
+    v = max(v, 0.5)
     self['muv_clip_uv_range_max'] = (u, v)
 
 
@@ -60,9 +53,9 @@ def get_clip_uv_range_min(self):
 
 def set_clip_uv_range_min(self, value):
     u = round_clip_uv_range(value[0])
-    u = -0.5 if u >= -0.5 else u
+    u = min(u, -0.5)
     v = round_clip_uv_range(value[1])
-    v = -0.5 if v >= -0.5 else v
+    v = min(v, -0.5)
     self['muv_clip_uv_range_min'] = (u, v)
 
 
@@ -138,9 +131,7 @@ class MUV_OT_ClipUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         objs = common.get_uv_editable_objects(context)
@@ -149,9 +140,7 @@ class MUV_OT_ClipUV(bpy.types.Operator):
             bm = common.create_bmesh(obj)
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
 
             uv_layer = bm.loops.layers.uv.verify()
@@ -181,7 +170,7 @@ class MUV_OT_ClipUV(bpy.types.Operator):
                 # clip
                 move_uv = Vector((0.0, 0.0))
                 clip_size = Vector(self.clip_uv_range_max) - \
-                    Vector(self.clip_uv_range_min)
+                        Vector(self.clip_uv_range_min)
                 if max_uv.x > self.clip_uv_range_max[0]:
                     target_x = math.fmod(max_uv.x - self.clip_uv_range_min[0],
                                          clip_size.x)

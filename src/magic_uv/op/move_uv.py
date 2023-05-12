@@ -22,14 +22,7 @@ def _is_valid_context(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if len(objs) != 1 else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -78,9 +71,7 @@ class MUV_OT_MoveUV(bpy.types.Operator):
         # we can not get area/space/region from console
         if common.is_console_mode():
             return False
-        if cls.is_running(context):
-            return False
-        return _is_valid_context(context)
+        return False if cls.is_running(context) else _is_valid_context(context)
 
     @classmethod
     def is_running(cls, _):

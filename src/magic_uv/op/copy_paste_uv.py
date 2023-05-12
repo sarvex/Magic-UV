@@ -27,14 +27,7 @@ def _is_valid_context(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if len(objs) != 1 else context.object.mode == 'EDIT'
 
 
 def get_copy_uv_layers(ops_obj, bm, uv_map):
@@ -47,13 +40,11 @@ def get_copy_uv_layers(ops_obj, bm, uv_map):
         uv_layers.append(bm.loops.layers.uv.verify())
         ops_obj.report({'INFO'}, "Copy UV coordinate")
     elif uv_map == "__all":
-        for uv in bm.loops.layers.uv.keys():
-            uv_layers.append(bm.loops.layers.uv[uv])
+        uv_layers.extend(bm.loops.layers.uv[uv] for uv in bm.loops.layers.uv.keys())
         ops_obj.report({'INFO'}, "Copy UV coordinate (UV map: ALL)")
     else:
         uv_layers.append(bm.loops.layers.uv[uv_map])
-        ops_obj.report(
-            {'INFO'}, "Copy UV coordinate (UV map: {})".format(uv_map))
+        ops_obj.report({'INFO'}, f"Copy UV coordinate (UV map: {uv_map})")
 
     return uv_layers
 
@@ -74,9 +65,7 @@ def get_paste_uv_layers(ops_obj, obj, bm, src_info, uv_map):
                            "Reached to the maximum number of UV map")
             return None
         uv_layers.append(bm.loops.layers.uv[new_uv_map.name])
-        ops_obj.report(
-            {'INFO'},
-            "Paste UV coordinate (UV map: {})".format(new_uv_map.name))
+        ops_obj.report({'INFO'}, f"Paste UV coordinate (UV map: {new_uv_map.name})")
     elif uv_map == "__all":
         for src_layer in src_info.keys():
             if src_layer not in bm.loops.layers.uv.keys():
@@ -89,8 +78,7 @@ def get_paste_uv_layers(ops_obj, obj, bm, src_info, uv_map):
         ops_obj.report({'INFO'}, "Paste UV coordinate (UV map: ALL)")
     else:
         uv_layers.append(bm.loops.layers.uv[uv_map])
-        ops_obj.report(
-            {'INFO'}, "Paste UV coordinate (UV map: {})".format(uv_map))
+        ops_obj.report({'INFO'}, f"Paste UV coordinate (UV map: {uv_map})")
 
     return uv_layers
 
@@ -137,9 +125,8 @@ def get_dest_face_info(ops_obj, bm, uv_layers, src_info, strategy,
         if strategy == 'N_N' and src_face_count != dest_face_count:
             ops_obj.report(
                 {'WARNING'},
-                "Number of selected faces is different from copied" +
-                "(src:{}, dest:{})"
-                .format(src_face_count, dest_face_count))
+                f"Number of selected faces is different from copied(src:{src_face_count}, dest:{dest_face_count})",
+            )
             return None
         dest_info[layer.name] = face_info
 
@@ -188,9 +175,8 @@ def _get_select_history_dest_face_info(ops_obj, bm, uv_layers, src_info,
         if strategy == 'N_N' and src_face_count != dest_face_count:
             ops_obj.report(
                 {'WARNING'},
-                "Number of selected faces is different from copied" +
-                "(src:{}, dest:{})"
-                .format(src_face_count, dest_face_count))
+                f"Number of selected faces is different from copied(src:{src_face_count}, dest:{dest_face_count})",
+            )
             return None
         dest_info[layer.name] = face_info
 
@@ -205,21 +191,21 @@ def paste_uv(ops_obj, bm, src_info, dest_info, uv_layers, strategy, flip,
 
         for idx, dinfo in enumerate(dest_faces):
             sinfo = None
-            if strategy == 'N_N':
-                sinfo = src_faces[idx]
-            elif strategy == 'N_M':
+            if strategy == 'N_M':
                 sinfo = src_faces[idx % len(src_faces)]
 
+            elif strategy == 'N_N':
+                sinfo = src_faces[idx]
             suv = sinfo["uvs"]
             spuv = sinfo["pin_uvs"]
             ss = sinfo["seams"]
-            if len(sinfo["uvs"]) != len(dinfo["uvs"]):
+            if len(suv) != len(dinfo["uvs"]):
                 ops_obj.report({'WARNING'}, "Some faces are different size")
                 return -1
 
-            suvs_fr = [uv for uv in suv]
-            spuvs_fr = [pin_uv for pin_uv in spuv]
-            ss_fr = [s for s in ss]
+            suvs_fr = list(suv)
+            spuvs_fr = list(spuv)
+            ss_fr = list(ss)
 
             # flip UVs
             if flip is True:
@@ -315,9 +301,7 @@ class MUV_OT_CopyPasteUV_CopyUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.copy_paste_uv
@@ -339,7 +323,7 @@ class MUV_OT_CopyPasteUV_CopyUV(bpy.types.Operator):
         props.src_info = src_info
 
         face_count = len(props.src_info[list(props.src_info.keys())[0]])
-        self.report({'INFO'}, "{} face(s) are copied".format(face_count))
+        self.report({'INFO'}, f"{face_count} face(s) are copied")
 
         return {'FINISHED'}
 
@@ -427,9 +411,7 @@ class MUV_OT_CopyPasteUV_PasteUV(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.copy_paste_uv
-        if not props.src_info:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_info else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.copy_paste_uv
@@ -454,21 +436,26 @@ class MUV_OT_CopyPasteUV_PasteUV(bpy.types.Operator):
         if dest_info is None:
             return {'CANCELLED'}
 
-        # paste
-        ret = paste_uv(self, bm, props.src_info, dest_info, uv_layers,
-                       self.strategy, self.flip_copied_uv,
-                       self.rotate_copied_uv, self.copy_seams)
-        if ret:
+        if ret := paste_uv(
+            self,
+            bm,
+            props.src_info,
+            dest_info,
+            uv_layers,
+            self.strategy,
+            self.flip_copied_uv,
+            self.rotate_copied_uv,
+            self.copy_seams,
+        ):
             return {'CANCELLED'}
 
         face_count = len(dest_info[list(dest_info.keys())[0]])
-        self.report({'INFO'}, "{} face(s) are pasted".format(face_count))
+        self.report({'INFO'}, f"{face_count} face(s) are pasted")
 
         bmesh.update_edit_mesh(obj.data)
 
-        if compat.check_version(2, 80, 0) < 0:
-            if self.copy_seams is True:
-                obj.data.show_edge_seams = True
+        if compat.check_version(2, 80, 0) < 0 and self.copy_seams is True:
+            obj.data.show_edge_seams = True
 
         return {'FINISHED'}
 
@@ -487,9 +474,7 @@ class MUV_MT_CopyPasteUV_PasteUV(bpy.types.Menu):
     def poll(cls, context):
         sc = context.scene
         props = sc.muv_props.copy_paste_uv
-        if not props.src_info:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_info else _is_valid_context(context)
 
     def draw(self, context):
         sc = context.scene
@@ -544,9 +529,7 @@ class MUV_OT_CopyPasteUV_SelSeqCopyUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.copy_paste_uv_selseq
@@ -568,7 +551,7 @@ class MUV_OT_CopyPasteUV_SelSeqCopyUV(bpy.types.Operator):
         props.src_info = src_info
 
         face_count = len(props.src_info[list(props.src_info.keys())[0]])
-        self.report({'INFO'}, "{} face(s) are selected".format(face_count))
+        self.report({'INFO'}, f"{face_count} face(s) are selected")
 
         return {'FINISHED'}
 
@@ -656,9 +639,7 @@ class MUV_OT_CopyPasteUV_SelSeqPasteUV(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.copy_paste_uv_selseq
-        if not props.src_info:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_info else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.copy_paste_uv_selseq
@@ -684,21 +665,26 @@ class MUV_OT_CopyPasteUV_SelSeqPasteUV(bpy.types.Operator):
         if dest_info is None:
             return {'CANCELLED'}
 
-        # paste
-        ret = paste_uv(self, bm, props.src_info, dest_info, uv_layers,
-                       self.strategy, self.flip_copied_uv,
-                       self.rotate_copied_uv, self.copy_seams)
-        if ret:
+        if ret := paste_uv(
+            self,
+            bm,
+            props.src_info,
+            dest_info,
+            uv_layers,
+            self.strategy,
+            self.flip_copied_uv,
+            self.rotate_copied_uv,
+            self.copy_seams,
+        ):
             return {'CANCELLED'}
 
         face_count = len(dest_info[list(dest_info.keys())[0]])
-        self.report({'INFO'}, "{} face(s) are pasted".format(face_count))
+        self.report({'INFO'}, f"{face_count} face(s) are pasted")
 
         bmesh.update_edit_mesh(obj.data)
 
-        if compat.check_version(2, 80, 0) < 0:
-            if self.copy_seams is True:
-                obj.data.show_edge_seams = True
+        if compat.check_version(2, 80, 0) < 0 and self.copy_seams is True:
+            obj.data.show_edge_seams = True
 
         return {'FINISHED'}
 
@@ -717,9 +703,7 @@ class MUV_MT_CopyPasteUV_SelSeqPasteUV(bpy.types.Menu):
     def poll(cls, context):
         sc = context.scene
         props = sc.muv_props.copy_paste_uv_selseq
-        if not props.src_info:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_info else _is_valid_context(context)
 
     def draw(self, context):
         sc = context.scene

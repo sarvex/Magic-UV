@@ -69,9 +69,7 @@ def check_version(major, minor, _):
         return 0
     if bpy.app.version[0] > major:
         return 1
-    if bpy.app.version[1] > minor:
-        return 1
-    return -1
+    return 1 if bpy.app.version[1] > minor else -1
 
 
 def redraw_all_areas():
@@ -99,9 +97,10 @@ def get_space(area_type, region_type, space_type):
         return (None, None, None)
     for region in area.regions:
         if region.type == region_type:
-            if compat.check_version(2, 80, 0) >= 0:
-                if region.width <= 1 or region.height <= 1:
-                    continue
+            if compat.check_version(2, 80, 0) >= 0 and (
+                region.width <= 1 or region.height <= 1
+            ):
+                continue
             break
     else:
         return (area, None, None)
@@ -121,11 +120,12 @@ def mouse_on_region(event, area_type, region_type):
     if region is None:
         return False
 
-    if (pos.x > region.x) and (pos.x < region.x + region.width) and \
-       (pos.y > region.y) and (pos.y < region.y + region.height):
-        return True
-
-    return False
+    return (
+        pos.x > region.x
+        and pos.x < region.x + region.width
+        and pos.y > region.y
+        and pos.y < region.y + region.height
+    )
 
 
 def mouse_on_area(event, area_type):
@@ -135,11 +135,12 @@ def mouse_on_area(event, area_type):
     if area is None:
         return False
 
-    if (pos.x > area.x) and (pos.x < area.x + area.width) and \
-       (pos.y > area.y) and (pos.y < area.y + area.height):
-        return True
-
-    return False
+    return (
+        pos.x > area.x
+        and pos.x < area.x + area.width
+        and pos.y > area.y
+        and pos.y < area.y + area.height
+    )
 
 
 def mouse_on_regions(event, area_type, regions):
@@ -147,8 +148,7 @@ def mouse_on_regions(event, area_type, regions):
         return False
 
     for region in regions:
-        result = mouse_on_region(event, area_type, region)
-        if result:
+        if result := mouse_on_region(event, area_type, region):
             return True
 
     return False
@@ -186,7 +186,6 @@ def __get_island_info(uv_layer, islands):
 
     island_info = []
     for isl in islands:
-        info = {}
         max_uv = Vector((-10000000.0, -10000000.0))
         min_uv = Vector((10000000.0, 10000000.0))
         ave_uv = Vector((0.0, 0.0))
@@ -216,14 +215,15 @@ def __get_island_info(uv_layer, islands):
             face['ave_uv'] = a
         ave_uv = ave_uv / num_uv
 
-        info['center'] = ave_uv
-        info['size'] = max_uv - min_uv
-        info['num_uv'] = num_uv
-        info['group'] = -1
-        info['faces'] = isl
-        info['max'] = max_uv
-        info['min'] = min_uv
-
+        info = {
+            'center': ave_uv,
+            'size': max_uv - min_uv,
+            'num_uv': num_uv,
+            'group': -1,
+            'faces': isl,
+            'max': max_uv,
+            'min': min_uv,
+        }
         island_info.append(info)
 
     return island_info
@@ -243,8 +243,7 @@ def __parse_island(bm, face_idx, faces_left, island,
             island.append({'face': bm.faces[fidx]})
             for v in face_to_verts[fidx]:
                 connected_faces = vert_to_faces[v]
-                for cf in connected_faces:
-                    faces_to_parse.append(cf)
+                faces_to_parse.extend(iter(connected_faces))
 
 
 def __get_island(bm, face_to_verts, vert_to_faces):
@@ -318,7 +317,7 @@ def get_island_info_from_bmesh(bm, only_selected=True):
     if only_selected:
         selected_faces = [f for f in bm.faces if f.select]
     else:
-        selected_faces = [f for f in bm.faces]
+        selected_faces = list(bm.faces)
 
     return get_island_info_from_faces(bm, selected_faces, uv_layer)
 
@@ -328,9 +327,7 @@ def get_island_info_from_faces(bm, faces, uv_layer):
 
     # Get island information
     uv_island_lists = __get_island(bm, ftv, vtf)
-    island_info = __get_island_info(uv_layer, uv_island_lists)
-
-    return island_info
+    return __get_island_info(uv_layer, uv_island_lists)
 
 
 def get_uvimg_editor_board_size(area):
@@ -373,31 +370,22 @@ def get_faces_list(bm, method, only_selected):
         if only_selected:
             faces_list.append([f for f in bm.faces if f.select])
         else:
-            faces_list.append([f for f in bm.faces])
+            faces_list.append(list(bm.faces))
     elif method == 'UV ISLAND':
         if not bm.loops.layers.uv:
             return None
         uv_layer = bm.loops.layers.uv.verify()
-        if only_selected:
-            faces = [f for f in bm.faces if f.select]
-            islands = get_island_info_from_faces(bm, faces, uv_layer)
-            for isl in islands:
-                faces_list.append([f["face"] for f in isl["faces"]])
-        else:
-            faces = [f for f in bm.faces]
-            islands = get_island_info_from_faces(bm, faces, uv_layer)
-            for isl in islands:
-                faces_list.append([f["face"] for f in isl["faces"]])
+        faces = [f for f in bm.faces if f.select] if only_selected else list(bm.faces)
+        islands = get_island_info_from_faces(bm, faces, uv_layer)
+        faces_list.extend([f["face"] for f in isl["faces"]] for isl in islands)
     elif method == 'FACE':
-        if only_selected:
-            for f in bm.faces:
-                if f.select:
-                    faces_list.append([f])
-        else:
-            for f in bm.faces:
-                faces_list.append([f])
+        faces_list.extend(
+            [f]
+            for f in bm.faces
+            if only_selected and f.select or not only_selected
+        )
     else:
-        raise ValueError("Invalid method: {}".format(method))
+        raise ValueError(f"Invalid method: {method}")
 
     return faces_list
 
@@ -428,11 +416,7 @@ def measure_mesh_area(obj, calc_method, only_selected):
 
     faces_list = get_faces_list(bm, calc_method, only_selected)
 
-    areas = []
-    for faces in faces_list:
-        areas.append(measure_mesh_area_from_faces(bm, faces))
-
-    return areas
+    return [measure_mesh_area_from_faces(bm, faces) for faces in faces_list]
 
 
 def measure_mesh_area_from_faces(bm, faces):
@@ -449,10 +433,7 @@ def measure_mesh_area_from_faces(bm, faces):
 def find_texture_layer(bm):
     if check_version(2, 80, 0) >= 0:
         return None
-    if bm.faces.layers.tex is None:
-        return None
-
-    return bm.faces.layers.tex.verify()
+    return None if bm.faces.layers.tex is None else bm.faces.layers.tex.verify()
 
 
 def find_texture_nodes_from_material(mtrl):
@@ -488,26 +469,20 @@ def find_image(obj, face=None, tex_layer=None):
 
     if len(images) >= 2:
         raise RuntimeError("Find more than 2 images")
-    if not images:
-        return None
-
-    return images[0]
+    return None if not images else images[0]
 
 
 def find_images(obj, face=None, tex_layer=None):
     images = []
 
     # try to find from texture_layer
-    if tex_layer and face:
-        if face[tex_layer].image is not None:
-            images.append(face[tex_layer].image)
+    if tex_layer and face and face[tex_layer].image is not None:
+        images.append(face[tex_layer].image)
 
     # not found, then try to search from node
     if not images:
         nodes = find_texture_nodes(obj)
-        for n in nodes:
-            images.append(n.image)
-
+        images.extend(n.image for n in nodes)
     return images
 
 
@@ -543,15 +518,11 @@ def measure_uv_area_from_faces(obj, bm, faces, uv_layer, tex_layer,
         # user specified
         if tex_selection_method == 'USER_SPECIFIED' and tex_size is not None:
             img_size = tex_size
-        # first texture if there are more than 2 textures assigned
-        # to the object
         elif tex_selection_method == 'FIRST':
-            img = find_image(obj, f, tex_layer)
-            # can not find from node, so we can not get texture size
-            if not img:
+            if img := find_image(obj, f, tex_layer):
+                img_size = img.size
+            else:
                 return None
-            img_size = img.size
-        # average texture size
         elif tex_selection_method == 'AVERAGE':
             imgs = find_images(obj, f, tex_layer)
             if not imgs:
@@ -563,7 +534,6 @@ def measure_uv_area_from_faces(obj, bm, faces, uv_layer, tex_layer,
                                   img_size_total[1] + img.size[1]]
             img_size = [img_size_total[0] / len(imgs),
                         img_size_total[1] / len(imgs)]
-        # max texture size
         elif tex_selection_method == 'MAX':
             imgs = find_images(obj, f, tex_layer)
             if not imgs:
@@ -574,7 +544,6 @@ def measure_uv_area_from_faces(obj, bm, faces, uv_layer, tex_layer,
                 img_size_max = [max(img_size_max[0], img.size[0]),
                                 max(img_size_max[1], img.size[1])]
             img_size = img_size_max
-        # min texture size
         elif tex_selection_method == 'MIN':
             imgs = find_images(obj, f, tex_layer)
             if not imgs:
@@ -586,8 +555,7 @@ def measure_uv_area_from_faces(obj, bm, faces, uv_layer, tex_layer,
                                 min(img_size_min[1], img.size[1])]
             img_size = img_size_min
         else:
-            raise RuntimeError("Unexpected method: {}"
-                               .format(tex_selection_method))
+            raise RuntimeError(f"Unexpected method: {tex_selection_method}")
 
         uv_area += f_uv_area * img_size[0] * img_size[1]
 
@@ -648,12 +616,7 @@ def __get_loop_pairs(l, uv_layer):
         for ll in l.vert.link_loops:
             # forward direction
             lln = ll.link_loop_next
-            # if there is same pair, skip it
-            found = False
-            for p in pairs:
-                if (ll in p) and (lln in p):
-                    found = True
-                    break
+            found = any((ll in p) and (lln in p) for p in pairs)
             # two loops must be selected
             if ll[uv_layer].select and lln[uv_layer].select:
                 if not found:
@@ -663,12 +626,7 @@ def __get_loop_pairs(l, uv_layer):
 
             # backward direction
             llp = ll.link_loop_prev
-            # if there is same pair, skip it
-            found = False
-            for p in pairs:
-                if (ll in p) and (llp in p):
-                    found = True
-                    break
+            found = any((ll in p) and (llp in p) for p in pairs)
             # two loops must be selected
             if ll[uv_layer].select and llp[uv_layer].select:
                 if not found:
@@ -720,7 +678,7 @@ def __sort_loop_pairs(uv_layer, pairs, closed):
     end_vert = sorted_pairs[-1][-1].vert
     if begin_vert != end_vert:
         return sorted_pairs, ""
-    if closed and (begin_vert == end_vert):
+    if closed:
         # if the sequence of UV is circular, it is ok
         return sorted_pairs, ""
 
@@ -778,23 +736,19 @@ def __get_next_loop_pair(pair):
     lp = pair[0].link_loop_prev
     if lp.vert == pair[1].vert:
         lp = pair[0].link_loop_next
-        if lp.vert == pair[1].vert:
-            # no loop is found
-            return None
+    if lp.vert == pair[1].vert:
+        # no loop is found
+        return None
 
     ln = pair[1].link_loop_next
     if ln.vert == pair[0].vert:
         ln = pair[1].link_loop_prev
-        if ln.vert == pair[0].vert:
-            # no loop is found
-            return None
+    if ln.vert == pair[0].vert:
+        # no loop is found
+        return None
 
     # tri-face
-    if lp == ln:
-        return [lp]
-
-    # quad-face
-    return [lp, ln]
+    return [lp] if lp == ln else [lp, ln]
 
 
 # | ---- |
@@ -811,11 +765,8 @@ def __get_next_poly_loop_pair(pair):
         for l2 in v2.link_loops:
             if l2 == pair[1]:
                 continue
-            if l1.link_loop_next == l2:
+            if l1.link_loop_next == l2 or l1.link_loop_prev == l2:
                 return [l1, l2]
-            elif l1.link_loop_prev == l2:
-                return [l1, l2]
-
     # no next poly loop is found
     return None
 
@@ -887,10 +838,7 @@ def get_loop_sequences(bm, uv_layer, closed=False):
     # get candidate loops
     cand_loops = []
     for f in sel_faces:
-        for l in f.loops:
-            if l[uv_layer].select:
-                cand_loops.append(l)
-
+        cand_loops.extend(l for l in f.loops if l[uv_layer].select)
     if len(cand_loops) < 2:
         return None, "More than 2 UVs must be selected"
 
@@ -902,10 +850,7 @@ def get_loop_sequences(bm, uv_layer, closed=False):
         return None, err
     loop_seqs, err = __get_loop_sequence_internal(uv_layer, loop_pairs,
                                                   isl_info, closed)
-    if not loop_seqs:
-        return None, err
-
-    return loop_seqs, ""
+    return (None, err) if not loop_seqs else (loop_seqs, "")
 
 
 def __is_segment_intersect(start1, end1, start2, end2):
@@ -958,8 +903,7 @@ class RingBuffer:
 
     def get(self, offset=0):
         size = len(self.__buffer)
-        val = self.__buffer[(self.__pointer + offset) % size]
-        return val
+        return self.__buffer[(self.__pointer + offset) % size]
 
     def next(self):
         size = len(self.__buffer)
@@ -1200,10 +1144,7 @@ def __is_polygon_flipped(points):
         uv2 = points.get(i + 1)
         a = uv1.x * uv2.y - uv1.y * uv2.x
         area = area + a
-    if area < 0:
-        # clock-wise
-        return True
-    return False
+    return area < 0
 
 
 def __is_point_in_polygon(point, subject_points):
@@ -1388,11 +1329,7 @@ def _is_uv_loop_connected(l1, l2, uv_layer):
 
 
 def create_uv_graph(loops, uv_layer):
-    # For looking up faster.
-    loop_index_to_loop = {}     # { loop index: loop }
-    for l in loops:
-        loop_index_to_loop[l.index] = l
-
+    loop_index_to_loop = {l.index: l for l in loops}
     # Setup relationship between uv_vert and loops.
     # uv_vert is a representative of the loops which shares same
     # UV coordinate.
@@ -1400,9 +1337,9 @@ def create_uv_graph(loops, uv_layer):
     loop_to_uv_vert = {}    # { loop: uv_vert belonged to }
     for l in loops:
         found = False
-        for k in uv_vert_to_loops.keys():
+        for k, v_ in uv_vert_to_loops.items():
             if _is_uv_loop_connected(k, l, uv_layer):
-                uv_vert_to_loops[k].append(l)
+                v_.append(l)
                 loop_to_uv_vert[l] = k
                 found = True
                 break
@@ -1423,7 +1360,7 @@ def create_uv_graph(loops, uv_layer):
 
     # Setup uv_vert graph.
     graph = Graph()
-    for v in uv_adj_verts.keys():
+    for v in uv_adj_verts:
         graph.add_node(
             Node(v.index, {"uv_vert": v, "loops": uv_vert_to_loops[v]})
         )

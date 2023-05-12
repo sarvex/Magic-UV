@@ -33,14 +33,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 # get sum vertex length of loop sequences
@@ -156,9 +149,8 @@ def _get_hdiff_uv_vinfl(uv_layer, loop_seqs, vidx, hidx, pidx, infl):
         elif i == (len(accum_uvlens[:-1]) - 1):
             if abs(accum_uvlens[i + 1] - target_length) > 0.000001:
                 raise Exception(
-                    "Internal Error: horizontal_target_length={}"
-                    " is not equal to {}"
-                    .format(target_length, accum_uvlens[-1]))
+                    f"Internal Error: horizontal_target_length={target_length} is not equal to {accum_uvlens[-1]}"
+                )
             tgt_seg_len = target_length - accum_uvlens[i]
             seg_len = accum_uvlens[i + 1] - accum_uvlens[i]
             uv1 = orig_uvs[i]
@@ -166,10 +158,9 @@ def _get_hdiff_uv_vinfl(uv_layer, loop_seqs, vidx, hidx, pidx, infl):
             target_uv = (uv1 - base_uv) + (uv2 - uv1) * tgt_seg_len / seg_len
             break
     else:
-        raise Exception("Internal Error: horizontal_target_length={}"
-                        " is not in range {} to {}"
-                        .format(target_length, accum_uvlens[0],
-                                accum_uvlens[-1]))
+        raise Exception(
+            f"Internal Error: horizontal_target_length={target_length} is not in range {accum_uvlens[0]} to {accum_uvlens[-1]}"
+        )
 
     return target_uv
 
@@ -206,10 +197,7 @@ def _get_vdiff_uv_vinfl(uv_layer, loop_seqs, vidx, hidx, pidx, infl):
 
     base_uv = loop_seqs[hidx][0][pidx][uv_layer].uv.copy()
 
-    # calculate original length
-    vloops = []
-    for s in loop_seqs[hidx]:
-        vloops.append(s[pidx])
+    vloops = [s[pidx] for s in loop_seqs[hidx]]
     total_vlen = _get_loop_vert_len(vloops)
     accum_vlens = _get_loop_vert_accum_len(vloops)
     total_uvlen = _get_loop_uv_len(vloops, uv_layer)
@@ -235,9 +223,9 @@ def _get_vdiff_uv_vinfl(uv_layer, loop_seqs, vidx, hidx, pidx, infl):
             break
         elif i == (len(accum_uvlens[:-1]) - 1):
             if abs(accum_uvlens[i + 1] - target_length) > 0.000001:
-                raise Exception("Internal Error: horizontal_target_length={}"
-                                " is not equal to {}"
-                                .format(target_length, accum_uvlens[-1]))
+                raise Exception(
+                    f"Internal Error: horizontal_target_length={target_length} is not equal to {accum_uvlens[-1]}"
+                )
             tgt_seg_len = target_length - accum_uvlens[i]
             seg_len = accum_uvlens[i + 1] - accum_uvlens[i]
             uv1 = orig_uvs[i]
@@ -245,10 +233,9 @@ def _get_vdiff_uv_vinfl(uv_layer, loop_seqs, vidx, hidx, pidx, infl):
             target_uv = (uv1 - base_uv) + (uv2 - uv1) * tgt_seg_len / seg_len
             break
     else:
-        raise Exception("Internal Error: horizontal_target_length={}"
-                        " is not in range {} to {}"
-                        .format(target_length, accum_uvlens[0],
-                                accum_uvlens[-1]))
+        raise Exception(
+            f"Internal Error: horizontal_target_length={target_length} is not in range {accum_uvlens[0]} to {accum_uvlens[-1]}"
+        )
 
     return target_uv
 
@@ -421,9 +408,7 @@ class MUV_OT_AlignUV_Circle(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         objs = common.get_uv_editable_objects(context)
@@ -437,51 +422,43 @@ class MUV_OT_AlignUV_Circle(bpy.types.Operator):
             # loop_seqs[horizontal][vertical][loop]
             loop_seqs, error = common.get_loop_sequences(bm, uv_layer, True)
             if not loop_seqs:
-                self.report({'WARNING'},
-                            "Object {}: {}".format(obj.name, error))
+                self.report({'WARNING'}, f"Object {obj.name}: {error}")
                 return {'CANCELLED'}
 
             # get circle and new UVs
             uvs = [hseq[0][0][uv_layer].uv.copy() for hseq in loop_seqs]
-            c, r = _get_circle(uvs[0:3])
+            c, r = _get_circle(uvs[:3])
             new_uvs = _calc_v_on_circle(uvs, c, r)
 
             # check if center is identical
             center_is_identical = False
             center = loop_seqs[0][-1][0].vert
             if (len(loop_seqs[0][-1]) == 1) and \
-                    loop_seqs[0][-1][0].vert == center:
+                        loop_seqs[0][-1][0].vert == center:
                 center_is_identical = True
 
             # check if topology is correct
-            if center_is_identical:
-                for hseq in loop_seqs[1:]:
+            for hseq in loop_seqs[1:]:
+                        # check if topology is correct
+                if center_is_identical:
                     if len(hseq[-1]) != 1:
-                        self.report({'WARNING'},
-                                    "Object {}: Last face must be triangle"
-                                    .format(obj.name))
+                        self.report({'WARNING'}, f"Object {obj.name}: Last face must be triangle")
                         return {'CANCELLED'}
                     if hseq[-1][0].vert != center:
-                        self.report({'WARNING'},
-                                    "Object {}: Center must be identical"
-                                    .format(obj.name))
+                        self.report({'WARNING'}, f"Object {obj.name}: Center must be identical")
                         return {'CANCELLED'}
-            else:
-                for hseq in loop_seqs[1:]:
+                else:
                     if len(hseq[-1]) == 1:
-                        self.report({'WARNING'},
-                                    "Object {}: Last face must not be triangle"
-                                    .format(obj.name))
+                        self.report({'WARNING'}, f"Object {obj.name}: Last face must not be triangle")
                         return {'CANCELLED'}
                     if hseq[-1][0].vert == center:
-                        self.report({'WARNING'},
-                                    "Object {}: Center must not be identical"
-                                    .format(obj.name))
+                        self.report({'WARNING'}, f"Object {obj.name}: Center must not be identical")
                         return {'CANCELLED'}
 
             # align to circle
-            if self.transmission:
-                for hidx, hseq in enumerate(loop_seqs):
+            for hidx, hseq in enumerate(loop_seqs):
+                        # align to circle
+                if self.transmission:
                     for vidx, pair in enumerate(hseq):
                         all_ = int((len(hseq) + 1) / 2)
                         if center_is_identical:
@@ -497,11 +474,10 @@ class MUV_OT_AlignUV_Circle(bpy.types.Operator):
                         # for quad polygon
                         next_hidx = (hidx + 1) % len(loop_seqs)
                         pair[1][uv_layer].uv = \
-                            c + ((new_uvs[next_hidx]) - c) * r
+                                c + ((new_uvs[next_hidx]) - c) * r
                         if self.select:
                             pair[1][uv_layer].select = True
-            else:
-                for hidx, hseq in enumerate(loop_seqs):
+                else:
                     pair = hseq[0]
                     pair[0][uv_layer].uv = new_uvs[hidx]
                     pair[1][uv_layer].uv = new_uvs[(hidx + 1) % len(loop_seqs)]
@@ -556,9 +532,7 @@ class MUV_OT_AlignUV_Straighten(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     # selected and paralleled UV loop sequence will be aligned
     def __align_w_transmission(self, loop_seqs, uv_layer):
@@ -657,8 +631,7 @@ class MUV_OT_AlignUV_Straighten(bpy.types.Operator):
             # loop_seqs[horizontal][vertical][loop]
             loop_seqs, error = common.get_loop_sequences(bm, uv_layer)
             if not loop_seqs:
-                self.report({'WARNING'},
-                            "Object {}: {}".format(obj.name, error))
+                self.report({'WARNING'}, f"Object {obj.name}: {error}")
                 return {'CANCELLED'}
 
             # align
@@ -721,9 +694,7 @@ class MUV_OT_AlignUV_Axis(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     # get min/max of UV
     def __get_uv_max_min(self, loop_seqs, uv_layer):
@@ -749,12 +720,12 @@ class MUV_OT_AlignUV_Axis(bpy.types.Operator):
             luv1 = pair[1][uv_layer]
             target_uv0 = Vector((0.0, 0.0))
             target_uv1 = Vector((0.0, 0.0))
-            if self.location == 'RIGHT_BOTTOM':
-                target_uv0.y = target_uv1.y = uv_min.y
+            if self.location == 'LEFT_TOP':
+                target_uv0.y = target_uv1.y = uv_min.y + height
             elif self.location == 'MIDDLE':
                 target_uv0.y = target_uv1.y = uv_min.y + height * 0.5
-            elif self.location == 'LEFT_TOP':
-                target_uv0.y = target_uv1.y = uv_min.y + height
+            elif self.location == 'RIGHT_BOTTOM':
+                target_uv0.y = target_uv1.y = uv_min.y
             if luv0.uv.x < luv1.uv.x:
                 target_uv0.x = uv_min.x + hidx * width / len(loop_seqs)
                 target_uv1.x = uv_min.x + (hidx + 1) * width / len(loop_seqs)
@@ -1034,16 +1005,14 @@ class MUV_OT_AlignUV_Axis(bpy.types.Operator):
                 self.__align_to_x_axis_wo_transmission(loop_seqs,
                                                        uv_layer, uv_min,
                                                        width, height)
-        # align along to y-axis
+        elif self.transmission:
+            self.__align_to_y_axis_w_transmission(loop_seqs,
+                                                  uv_layer, uv_min,
+                                                  width, height)
         else:
-            if self.transmission:
-                self.__align_to_y_axis_w_transmission(loop_seqs,
-                                                      uv_layer, uv_min,
-                                                      width, height)
-            else:
-                self.__align_to_y_axis_wo_transmission(loop_seqs,
-                                                       uv_layer, uv_min,
-                                                       width, height)
+            self.__align_to_y_axis_wo_transmission(loop_seqs,
+                                                   uv_layer, uv_min,
+                                                   width, height)
 
     def execute(self, context):
         objs = common.get_uv_editable_objects(context)
@@ -1057,8 +1026,7 @@ class MUV_OT_AlignUV_Axis(bpy.types.Operator):
             # loop_seqs[horizontal][vertical][loop]
             loop_seqs, error = common.get_loop_sequences(bm, uv_layer)
             if not loop_seqs:
-                self.report({'WARNING'},
-                            "Object {}: {}".format(obj.name, error))
+                self.report({'WARNING'}, f"Object {obj.name}: {error}")
                 return {'CANCELLED'}
 
             # get height and width
@@ -1110,11 +1078,11 @@ class MUV_OT_AlignUV_SnapToPoint(bpy.types.Operator):
 
         # Process snap operation.
         for face in selected_faces:
-            for l in face.loops:
-                if context.tool_settings.use_uv_select_sync or \
-                        l[uv_layer].select:
-                    target_loops.append(l)
-
+            target_loops.extend(
+                l
+                for l in face.loops
+                if context.tool_settings.use_uv_select_sync or l[uv_layer].select
+            )
         return target_loops
 
     def _get_snap_target_faces(self, context, bm, uv_layer):
@@ -1168,7 +1136,7 @@ class MUV_OT_AlignUV_SnapToPoint(bpy.types.Operator):
 
             if self.group == 'VERT':
                 target_loops = \
-                    self._get_snap_target_loops(context, bm, uv_layer)
+                        self._get_snap_target_loops(context, bm, uv_layer)
 
                 # Process snap operation.
                 for l in target_loops:
@@ -1177,7 +1145,7 @@ class MUV_OT_AlignUV_SnapToPoint(bpy.types.Operator):
 
             elif self.group == 'FACE':
                 target_faces = \
-                    self._get_snap_target_faces(context, bm, uv_layer)
+                        self._get_snap_target_faces(context, bm, uv_layer)
 
                 for face in target_faces:
                     ave_uv = Vector((0.0, 0.0))
@@ -1193,7 +1161,7 @@ class MUV_OT_AlignUV_SnapToPoint(bpy.types.Operator):
 
             elif self.group == 'UV_ISLAND':
                 target_islands = \
-                    self._get_snap_target_islands(context, bm, uv_layer)
+                        self._get_snap_target_islands(context, bm, uv_layer)
 
                 for isl in target_islands:
                     ave_uv = Vector((0.0, 0.0))
@@ -1215,10 +1183,7 @@ class MUV_OT_AlignUV_SnapToPoint(bpy.types.Operator):
             bmesh.update_edit_mesh(obj.data)
 
         if no_selection_reason:
-            self.report(
-                {'WARNING'},
-                "Must select more than 1 {}.".format(no_selection_reason)
-            )
+            self.report({'WARNING'}, f"Must select more than 1 {no_selection_reason}.")
             return {'CANCELLED'}
 
         return {'FINISHED'}
@@ -1336,10 +1301,7 @@ class MUV_OT_AlignUV_SnapToEdge(bpy.types.Operator):
 
         cand_loops = []
         for edge in selected_edges:
-            for l in edge.link_loops:
-                if l[uv_layer].select:
-                    cand_loops.append(l)
-
+            cand_loops.extend(l for l in edge.link_loops if l[uv_layer].select)
         for l in cand_loops:
             if l[uv_layer].select and l.link_loop_next[uv_layer].select:
                 d = {l, l.link_loop_next}
@@ -1369,7 +1331,7 @@ class MUV_OT_AlignUV_SnapToEdge(bpy.types.Operator):
 
             if self.group == 'EDGE':
                 target_loop_pairs = \
-                    self._get_snap_target_loop_pairs(bm, uv_layer)
+                        self._get_snap_target_loop_pairs(bm, uv_layer)
 
                 for pair in target_loop_pairs:
                     p = list(pair)
@@ -1383,7 +1345,7 @@ class MUV_OT_AlignUV_SnapToEdge(bpy.types.Operator):
 
             elif self.group == 'FACE':
                 target_loop_pairs = \
-                    self._get_snap_target_loop_pairs(bm, uv_layer)
+                        self._get_snap_target_loop_pairs(bm, uv_layer)
 
                 face_processed = []
                 for pair in target_loop_pairs:
@@ -1395,8 +1357,7 @@ class MUV_OT_AlignUV_SnapToEdge(bpy.types.Operator):
                     if face in face_processed:
                         self.report(
                             {'WARNING'},
-                            "Must select only one edge per face. (Object: {})"
-                            .format(obj.name)
+                            f"Must select only one edge per face. (Object: {obj.name})",
                         )
                         return {'CANCELLED'}
                     face_processed.append(face)
@@ -1406,7 +1367,7 @@ class MUV_OT_AlignUV_SnapToEdge(bpy.types.Operator):
 
             elif self.group == 'UV_ISLAND':
                 target_loop_pairs = \
-                    self._get_snap_target_loop_pairs(bm, uv_layer)
+                        self._get_snap_target_loop_pairs(bm, uv_layer)
 
                 islands = common.get_island_info_from_bmesh(
                     bm, only_selected=False)
@@ -1419,13 +1380,9 @@ class MUV_OT_AlignUV_SnapToEdge(bpy.types.Operator):
                     # Find island to process.
                     face = p[0].face
                     target_isl = \
-                        self._find_target_island_from_face(islands, face)
+                            self._find_target_island_from_face(islands, face)
                     if target_isl is None:
-                        self.report(
-                            {'WARNING'},
-                            "Failed to find island. (Object: {})"
-                            .format(obj.name)
-                        )
+                        self.report({'WARNING'}, f"Failed to find island. (Object: {obj.name})")
                         return {'CANCELLED'}
                     if target_isl in isl_processed:
                         self.report(
@@ -1469,10 +1426,7 @@ class MUV_OT_AlignUV_Snap_SetEdgeTargetToEdgeCenter(bpy.types.Operator):
 
         cand_loops = []
         for edge in selected_edges:
-            for l in edge.link_loops:
-                if l[uv_layer].select:
-                    cand_loops.append(l)
-
+            cand_loops.extend(l for l in edge.link_loops if l[uv_layer].select)
         for l in cand_loops:
             if l[uv_layer].select and l.link_loop_next[uv_layer].select:
                 d = {l, l.link_loop_next}

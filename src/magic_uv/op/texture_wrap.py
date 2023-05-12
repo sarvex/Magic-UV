@@ -29,14 +29,7 @@ def _is_valid_context(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if len(objs) != 1 else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -89,9 +82,7 @@ class MUV_OT_TextureWrap_Refer(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.texture_wrap
@@ -136,9 +127,7 @@ class MUV_OT_TextureWrap_Set(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.texture_wrap
-        if not props.ref_obj:
-            return False
-        return _is_valid_context(context)
+        return False if not props.ref_obj else _is_valid_context(context)
 
     def execute(self, context):
         sc = context.scene
@@ -157,10 +146,11 @@ class MUV_OT_TextureWrap_Set(bpy.types.Operator):
         uv_layer = bm.loops.layers.uv.verify()
 
         if sc.muv_texture_wrap_selseq:
-            sel_faces = []
-            for hist in bm.select_history:
-                if isinstance(hist, bmesh.types.BMFace) and hist.select:
-                    sel_faces.append(hist)
+            sel_faces = [
+                hist
+                for hist in bm.select_history
+                if isinstance(hist, bmesh.types.BMFace) and hist.select
+            ]
             if not sel_faces:
                 self.report({'WARNING'}, "Must select more than one face")
                 return {'CANCELLED'}
@@ -293,7 +283,7 @@ class MUV_OT_TextureWrap_Set(bpy.types.Operator):
             # apply to common UVs
             for info in common_verts:
                 info["tgt_loop"][uv_layer].uv = \
-                    info["ref_loop"][uv_layer].uv.copy()
+                        info["ref_loop"][uv_layer].uv.copy()
             # apply to other UVs
             for info in tgt_other_verts:
                 info["loop"][uv_layer].uv = info["target_uv"]

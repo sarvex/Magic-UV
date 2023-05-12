@@ -28,14 +28,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _update_uvinsp_info(context):
@@ -54,7 +47,7 @@ def _update_uvinsp_info(context):
         uv_layer = bm.loops.layers.uv.verify()
 
         if context.tool_settings.use_uv_select_sync:
-            sel_faces = [f for f in bm.faces]
+            sel_faces = list(bm.faces)
         else:
             sel_faces = [f for f in bm.faces if f.select]
         bm_to_obj[bm] = obj
@@ -186,9 +179,7 @@ class MUV_OT_UVInspection_Render(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return False
-        return _is_valid_context(context)
+        return False if common.is_console_mode() else _is_valid_context(context)
 
     @classmethod
     def is_running(cls, _):
@@ -285,16 +276,7 @@ class MUV_OT_UVInspection_Render(bpy.types.Operator):
         if sc.muv_uv_inspection_show_overlapped:
             color = prefs.uv_inspection_overlapped_color
             for info in props.overlapped_info:
-                if sc.muv_uv_inspection_show_mode == 'PART':
-                    for poly in info["polygons"]:
-                        imm.immBegin(imm.GL_TRIANGLE_FAN)
-                        imm.immColor4f(color[0], color[1], color[2], color[3])
-                        for uv in poly:
-                            x, y = context.region.view2d.view_to_region(
-                                uv.x, uv.y, clip=False)
-                            imm.immVertex2f(x, y)
-                        imm.immEnd()
-                elif sc.muv_uv_inspection_show_mode == 'FACE':
+                if sc.muv_uv_inspection_show_mode == 'FACE':
                     imm.immBegin(imm.GL_TRIANGLE_FAN)
                     imm.immColor4f(color[0], color[1], color[2], color[3])
                     for uv in info["subject_uvs"]:
@@ -303,6 +285,15 @@ class MUV_OT_UVInspection_Render(bpy.types.Operator):
                         imm.immVertex2f(x, y)
                     imm.immEnd()
 
+                elif sc.muv_uv_inspection_show_mode == 'PART':
+                    for poly in info["polygons"]:
+                        imm.immBegin(imm.GL_TRIANGLE_FAN)
+                        imm.immColor4f(color[0], color[1], color[2], color[3])
+                        for uv in poly:
+                            x, y = context.region.view2d.view_to_region(
+                                uv.x, uv.y, clip=False)
+                            imm.immVertex2f(x, y)
+                        imm.immEnd()
         # render flipped UV
         if sc.muv_uv_inspection_show_flipped:
             color = prefs.uv_inspection_flipped_color
@@ -383,9 +374,7 @@ class MUV_OT_UVInspection_PaintUVIsland(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def _get_or_new_image(self, name, width, height):
         if name in bpy.data.images.keys():
@@ -449,10 +438,10 @@ class MUV_OT_UVInspection_PaintUVIsland(bpy.types.Operator):
             compat.set_active_object(obj)
 
             # Setup material of drawing target.
-            target_image = self._get_or_new_image(
-                "MagicUV_PaintUVIsland_{}".format(i), 4096, 4096)
-            target_mtrl = self._get_or_new_material(
-                "MagicUV_PaintUVMaterial_{}".format(i))
+            target_image = self._get_or_new_image(f"MagicUV_PaintUVIsland_{i}", 4096, 4096)
+            target_mtrl = self._get_or_new_material(f"MagicUV_PaintUVMaterial_{i}")
+            # Apply material to object (all faces).
+            found = False
             if compat.check_version(2, 80, 0) >= 0:
                 target_mtrl.use_nodes = True
                 output_node = next(n for n in target_mtrl.node_tree.nodes
@@ -462,58 +451,33 @@ class MUV_OT_UVInspection_PaintUVIsland(bpy.types.Operator):
                 for n in nodes_to_remove:
                     target_mtrl.node_tree.nodes.remove(n)
                 texture_node = \
-                    target_mtrl.node_tree.nodes.new("ShaderNodeTexImage")
+                        target_mtrl.node_tree.nodes.new("ShaderNodeTexImage")
                 texture_node.image = target_image
                 target_mtrl.node_tree.links.new(output_node.inputs["Surface"],
                                                 texture_node.outputs["Color"])
-                obj.data.use_paint_mask = True
-
-                # Apply material to object (all faces).
-                found = False
-                for mtrl_idx, mtrl_slot in enumerate(obj.material_slots):
-                    if mtrl_slot.material == target_mtrl:
-                        found = True
-                        break
-                if not found:
-                    bpy.ops.object.material_slot_add()
-                    mtrl_idx = len(obj.material_slots) - 1
-                    obj.material_slots[mtrl_idx].material = target_mtrl
-                bpy.ops.object.mode_set(mode='EDIT')
-                bm = bmesh.from_edit_mesh(obj.data)
-                bm.faces.ensure_lookup_table()
-                for f in bm.faces:
-                    f.select = True
-                bmesh.update_edit_mesh(obj.data)
-                obj.active_material_index = mtrl_idx
-                obj.active_material = target_mtrl
-                bpy.ops.object.material_slot_assign()
             else:
                 target_tex_slot = target_mtrl.texture_slots.add()
-                target_tex = self._get_or_new_texture(
-                    "MagicUV_PaintUVTexture_{}".format(i))
+                target_tex = self._get_or_new_texture(f"MagicUV_PaintUVTexture_{i}")
                 target_tex_slot.texture = target_tex
-                obj.data.use_paint_mask = True
+            for mtrl_idx, mtrl_slot in enumerate(obj.material_slots):
+                if mtrl_slot.material == target_mtrl:
+                    found = True
+                    break
+            if not found:
+                bpy.ops.object.material_slot_add()
+                mtrl_idx = len(obj.material_slots) - 1
+                obj.material_slots[mtrl_idx].material = target_mtrl
+            bpy.ops.object.mode_set(mode='EDIT')
+            obj.data.use_paint_mask = True
 
-                # Apply material to object (all faces).
-                found = False
-                for mtrl_idx, mtrl_slot in enumerate(obj.material_slots):
-                    if mtrl_slot.material == target_mtrl:
-                        found = True
-                        break
-                if not found:
-                    bpy.ops.object.material_slot_add()
-                    mtrl_idx = len(obj.material_slots) - 1
-                    obj.material_slots[mtrl_idx].material = target_mtrl
-                bpy.ops.object.mode_set(mode='EDIT')
-                bm = bmesh.from_edit_mesh(obj.data)
-                bm.faces.ensure_lookup_table()
-                for f in bm.faces:
-                    f.select = True
-                bmesh.update_edit_mesh(obj.data)
-                obj.active_material_index = mtrl_idx
-                obj.active_material = target_mtrl
-                bpy.ops.object.material_slot_assign()
-
+            bm = bmesh.from_edit_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+            bmesh.update_edit_mesh(obj.data)
+            obj.active_material = target_mtrl
+            bpy.ops.object.material_slot_assign()
+            obj.active_material_index = mtrl_idx
+            for f in bm.faces:
+                f.select = True
             # Update active image in Image Editor.
             _, _, space = common.get_space(
                 'IMAGE_EDITOR', 'WINDOW', 'IMAGE_EDITOR')
@@ -556,7 +520,7 @@ class MUV_OT_UVInspection_PaintUVIsland(bpy.types.Operator):
                                                image_tool='FILL')
                 else:
                     paint_settings = \
-                        bpy.data.scenes['Scene'].tool_settings.image_paint
+                            bpy.data.scenes['Scene'].tool_settings.image_paint
                     paint_mode_orig = paint_settings.mode
                     paint_canvas_orig = paint_settings.canvas
                     paint_settings.mode = 'IMAGE'

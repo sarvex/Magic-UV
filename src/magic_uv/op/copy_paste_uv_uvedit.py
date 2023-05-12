@@ -29,14 +29,7 @@ def _is_valid_context(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if len(objs) != 1 else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -88,9 +81,7 @@ class MUV_OT_CopyPasteUVUVEdit_CopyUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.copy_paste_uv_uvedit
@@ -107,11 +98,7 @@ class MUV_OT_CopyPasteUVUVEdit_CopyUV(bpy.types.Operator):
         for face in bm.faces:
             if not face.select:
                 continue
-            skip = False
-            for l in face.loops:
-                if not l[uv_layer].select:
-                    skip = True
-                    break
+            skip = any(not l[uv_layer].select for l in face.loops)
             if skip:
                 continue
             props.src_uvs.append([l[uv_layer].uv.copy() for l in face.loops])
@@ -137,9 +124,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUV(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.copy_paste_uv_uvedit
-        if not props.src_uvs:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_uvs else _is_valid_context(context)
 
     def execute(self, context):
         props = context.scene.muv_props.copy_paste_uv_uvedit
@@ -157,11 +142,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUV(bpy.types.Operator):
         for face in bm.faces:
             if not face.select:
                 continue
-            skip = False
-            for l in face.loops:
-                if not l[uv_layer].select:
-                    skip = True
-                    break
+            skip = any(not l[uv_layer].select for l in face.loops)
             if skip:
                 continue
             dest_face_indices.append(face.index)
@@ -196,7 +177,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUV(bpy.types.Operator):
                 turn = Vector((length * cos(radian_fin),
                                length * sin(radian_fin)))
                 target_uv = Vector((turn.x * ratio, turn.y * ratio)) + \
-                    dest_base
+                        dest_base
                 l[uv_layer].uv = target_uv
 
         bmesh.update_edit_mesh(obj.data)
@@ -212,13 +193,12 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUV(bpy.types.Operator):
 def get_counts(context, island, uv_layer):
     selected_count = 0
     all_count = 0
-    if context.tool_settings.use_uv_select_sync:
-        for f in island["faces"]:
+    for f in island["faces"]:
+        if context.tool_settings.use_uv_select_sync:
             all_count += 1
             if f["face"].select:
                 selected_count += 1
-    else:
-        for f in island["faces"]:
+        else:
             for l in f["face"].loops:
                 all_count += 1
                 if l[uv_layer].select:
@@ -241,9 +221,7 @@ class MUV_OT_CopyPasteUVUVEdit_CopyUVIsland(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         sc = context.scene
@@ -313,9 +291,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUVIsland(bpy.types.Operator):
             return True
         sc = context.scene
         props = sc.muv_props.copy_paste_uv_island
-        if not props.src_data:
-            return False
-        return _is_valid_context(context)
+        return False if not props.src_data else _is_valid_context(context)
 
     def execute(self, context):
         sc = context.scene
@@ -324,9 +300,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUVIsland(bpy.types.Operator):
         src_data = props.src_data
         src_objs = props.src_objects
 
-        bms_and_uv_layers = {}
-        for d in src_data:
-            bms_and_uv_layers[d["bmesh"]] = d["uv_layer"]
+        bms_and_uv_layers = {d["bmesh"]: d["uv_layer"] for d in src_data}
         dst_data = []
         for bm, uv_layer in bms_and_uv_layers.items():
             if context.tool_settings.use_uv_select_sync:
@@ -358,8 +332,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUVIsland(bpy.types.Operator):
         for ddata in dst_data:
             dst_loops = []
             for f in ddata["island"]["faces"]:
-                for l in f["face"].loops:
-                    dst_loops.append(l)
+                dst_loops.extend(iter(f["face"].loops))
             dst_uv_layer = ddata["uv_layer"]
 
             # Find a suitable island.
@@ -369,8 +342,7 @@ class MUV_OT_CopyPasteUVUVEdit_PasteUVIsland(bpy.types.Operator):
 
                 src_loops = []
                 for f in sdata["island"]["faces"]:
-                    for l in f["face"].loops:
-                        src_loops.append(l)
+                    src_loops.extend(iter(f["face"].loops))
                 src_uv_layer = sdata["uv_layer"]
 
                 if len(src_loops) != len(dst_loops):

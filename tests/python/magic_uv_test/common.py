@@ -15,8 +15,10 @@ def check_addon_enabled(mod):
         result = bpy.ops.wm.addon_enable(module=mod)
     else:
         result = bpy.ops.preferences.addon_enable(module=mod)
-    assert (result == {'FINISHED'}), "Failed to enable add-on %s" % (mod)
-    assert (mod in compat.get_user_preferences(bpy.context).addons.keys()), "Failed to enable add-on %s" % (mod)
+    assert (result == {'FINISHED'}), f"Failed to enable add-on {mod}"
+    assert (
+        mod in compat.get_user_preferences(bpy.context).addons.keys()
+    ), f"Failed to enable add-on {mod}"
 
 
 def check_addon_disabled(mod):
@@ -24,8 +26,10 @@ def check_addon_disabled(mod):
         result = bpy.ops.wm.addon_disable(module=mod)
     else:
         result = bpy.ops.preferences.addon_disable(module=mod)
-    assert (result == {'FINISHED'}), "Failed to disable add-on %s" % (mod)
-    assert (not mod in compat.get_user_preferences(bpy.context).addons.keys()), "Failed to disable add-on %s" % (mod)
+    assert (result == {'FINISHED'}), f"Failed to disable add-on {mod}"
+    assert (
+        mod not in compat.get_user_preferences(bpy.context).addons.keys()
+    ), f"Failed to disable add-on {mod}"
 
 
 def operator_exists(idname):
@@ -108,10 +112,9 @@ def select_unlink_faces_bm(bm, face, num_face):
     linked_faces = []
     selected_faces = []
     for e in face.edges:
-        for lf in e.link_faces:
-            linked_faces.append(lf)
+        linked_faces.extend(iter(e.link_faces))
     for f in bm.faces:
-        if not f in linked_faces:
+        if f not in linked_faces:
             f.select = True
             count = count + 1
             selected_faces.append(f)
@@ -240,21 +243,19 @@ class TestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if cls.submodule_name is not None:
-            print("\n======== Module Test: {}.{} ({}) ========"
-               .format(cls.package_name, cls.module_name, cls.submodule_name))
+            print(
+                f"\n======== Module Test: {cls.package_name}.{cls.module_name} ({cls.submodule_name}) ========"
+            )
         else:
-            print("\n======== Module Test: {}.{} ========"
-               .format(cls.package_name, cls.module_name))
+            print(f"\n======== Module Test: {cls.package_name}.{cls.module_name} ========")
         try:
             bpy.ops.wm.read_factory_settings()
             check_addon_enabled(cls.package_name)
             for op in cls.idname:
                 if op[0] == 'OPERATOR':
-                    assert operator_exists(op[1]), \
-                        "Operator {} does not exist".format(op[1])
+                    assert operator_exists(op[1]), f"Operator {op[1]} does not exist"
                 elif op[0] == 'MENU':
-                    assert menu_exists(op[1]), \
-                        "Menu {} does not exist".format(op[1])
+                    assert menu_exists(op[1]), f"Menu {op[1]} does not exist"
             bpy.ops.wm.save_as_mainfile(filepath=TESTEE_FILE)
         except AssertionError as e:
             print(e)
@@ -266,7 +267,7 @@ class TestBase(unittest.TestCase):
             check_addon_disabled(cls.package_name)
             for op in cls.idname:
                 if op[0] == 'OPERATOR':
-                    assert not operator_exists(op[1]), "Operator {} exists".format(op[1])
+                    assert not operator_exists(op[1]), f"Operator {op[1]} exists"
                 elif op[0] == 'MENU':
                     assert not menu_exists(op[1]), "Menu %s exists".format(op[1])
         except AssertionError as e:

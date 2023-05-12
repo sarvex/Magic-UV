@@ -22,7 +22,7 @@ class PropertyClassRegistry:
     def add_class(cls, idname, prop_class, legacy):
         for class_ in cls.class_list:
             if (class_["idname"] == idname) and (class_["legacy"] == legacy):
-                raise RuntimeError("{} is already registered".format(idname))
+                raise RuntimeError(f"{idname} is already registered")
 
         new_op = {
             "idname": idname,
@@ -30,19 +30,19 @@ class PropertyClassRegistry:
             "legacy": legacy,
         }
         cls.class_list.append(new_op)
-        common.debug_print("{} is registered.".format(idname))
+        common.debug_print(f"{idname} is registered.")
 
     @classmethod
     def init_props(cls, scene):
         for class_ in cls.class_list:
             class_["class"].init_props(scene)
-            common.debug_print("{} is initialized.".format(class_["idname"]))
+            common.debug_print(f'{class_["idname"]} is initialized.')
 
     @classmethod
     def del_props(cls, scene):
         for class_ in cls.class_list:
             class_["class"].del_props(scene)
-            common.debug_print("{} is cleared.".format(class_["idname"]))
+            common.debug_print(f'{class_["idname"]} is cleared.')
 
     @classmethod
     def cleanup(cls):

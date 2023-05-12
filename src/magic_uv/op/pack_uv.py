@@ -32,14 +32,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _sort_island_faces(kd, uvs, isl1, isl2):
@@ -246,9 +239,7 @@ class MUV_OT_PackUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         objs = common.get_uv_editable_objects(context)
@@ -263,9 +254,7 @@ class MUV_OT_PackUV(bpy.types.Operator):
             if common.check_version(2, 73, 0) >= 0:
                 bm.faces.ensure_lookup_table()
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
 
@@ -308,21 +297,15 @@ class MUV_OT_PackUV(bpy.types.Operator):
 
             src_loops = []
             for f in group[0]["faces"]:
-                for l in f["face"].loops:
-                    src_loops.append(l)
-
+                src_loops.extend(iter(f["face"].loops))
             src_uv_graph = common.create_uv_graph(src_loops, src_uv_layer)
 
             for stride_idx, g in enumerate(group[1:]):
                 dst_bm = island_to_bm[g["id"]]
                 dst_uv_layer = island_to_uv_layer[g["id"]]
-                dst_loop_lists = bm_to_loop_lists[dst_bm]
-
                 dst_loops = []
                 for f in g["faces"]:
-                    for l in f["face"].loops:
-                        dst_loops.append(l)
-
+                    dst_loops.extend(iter(f["face"].loops))
                 dst_uv_graph = common.create_uv_graph(dst_loops, dst_uv_layer)
 
                 uv_stride = Vector(((stride_idx + 1) * self.stride.x,
@@ -346,6 +329,8 @@ class MUV_OT_PackUV(bpy.types.Operator):
                         for l in l2:
                             l[dst_uv_layer].uv = uv1 + uv_stride
                 else:
+                    dst_loop_lists = bm_to_loop_lists[dst_bm]
+
                     for (src_face, dest_face) in zip(
                             group[0]['sorted'], g['sorted']):
                         for (src_loop, dest_loop) in zip(
@@ -354,8 +339,8 @@ class MUV_OT_PackUV(bpy.types.Operator):
                             src_lidx = src_loop.index
                             dst_lidx = dest_loop.index
                             dst_loop_lists[dst_lidx][dst_uv_layer].uv = \
-                                src_loop_lists[src_lidx][src_uv_layer].uv + \
-                                uv_stride
+                                    src_loop_lists[src_lidx][src_uv_layer].uv + \
+                                    uv_stride
 
         # restore face/UV selection
         bpy.ops.uv.select_all(action='DESELECT')

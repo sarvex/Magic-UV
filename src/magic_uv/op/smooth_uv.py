@@ -23,14 +23,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -100,9 +93,7 @@ class MUV_OT_SmoothUV(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def __smooth_wo_transmission(self, loop_seqs, uv_layer):
         # calculate path length
@@ -193,9 +184,8 @@ class MUV_OT_SmoothUV(bpy.types.Operator):
             orig_uvs.append(uvs)
 
         for hidx, hseq in enumerate(loop_seqs):
-            for vidx, (pair, uvs, accm_v, full_v, accm_uv, full_uv)\
-                    in enumerate(zip(hseq, orig_uvs, accm_vlens, full_vlens,
-                                     accm_uvlens, full_uvlens)):
+            for pair, uvs, accm_v, full_v, accm_uv, full_uv in zip(hseq, orig_uvs, accm_vlens, full_vlens,
+                                     accm_uvlens, full_uvlens):
                 for pidx, l in enumerate(pair):
                     if self.select:
                         l[uv_layer].select = True
@@ -211,7 +201,7 @@ class MUV_OT_SmoothUV(bpy.types.Operator):
                     tgt_noinfl = full_uv * (hidx + pidx) / (len(loop_seqs))
                     tgt_infl = full_uv * accm_v[hidx * 2 + pidx] / full_v
                     target_length = tgt_noinfl * (1 - self.mesh_infl) + \
-                        tgt_infl * self.mesh_infl
+                            tgt_infl * self.mesh_infl
 
                     # get target UV
                     for i in range(len(accm_uv[:-1])):
@@ -222,7 +212,7 @@ class MUV_OT_SmoothUV(bpy.types.Operator):
                             uv1 = uvs[i]
                             uv2 = uvs[i + 1]
                             target_uv = uv1 +\
-                                (uv2 - uv1) * tgt_seg_len / seg_len
+                                    (uv2 - uv1) * tgt_seg_len / seg_len
                             break
                     else:
                         self.report({'ERROR'}, "Failed to get target UV")
@@ -249,8 +239,7 @@ class MUV_OT_SmoothUV(bpy.types.Operator):
             # loop_seqs[horizontal][vertical][loop]
             loop_seqs, error = common.get_loop_sequences(bm, uv_layer)
             if not loop_seqs:
-                self.report({'WARNING'},
-                            "Object {}: {}".format(obj.name, error))
+                self.report({'WARNING'}, f"Object {obj.name}: {error}")
                 return {'CANCELLED'}
 
             # smooth

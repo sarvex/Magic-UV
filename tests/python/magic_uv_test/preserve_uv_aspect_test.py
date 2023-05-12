@@ -96,7 +96,7 @@ class TestPreserveUVAspect(common.TestBase):
             compat.set_active_object(bpy.data.objects[name])
             bpy.ops.object.mode_set(mode='EDIT')
             bpy.ops.mesh.uv_texture_add()
-            common.assign_new_image(bpy.data.objects[name], "Img " + name)
+            common.assign_new_image(bpy.data.objects[name], f"Img {name}")
             bpy.ops.mesh.select_all(action='SELECT')
 
         # Select two objects.
@@ -106,7 +106,6 @@ class TestPreserveUVAspect(common.TestBase):
         bpy.ops.object.mode_set(mode='EDIT')
 
         result = bpy.ops.uv.muv_preserve_uv_aspect(
-            dest_img_name="Img " + obj_names[0],
-            origin='RIGHT_TOP'
+            dest_img_name=f"Img {obj_names[0]}", origin='RIGHT_TOP'
         )
         self.assertSetEqual(result, {'FINISHED'})

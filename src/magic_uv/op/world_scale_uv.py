@@ -30,14 +30,7 @@ def _is_valid_context_for_measure(context):
 
     # Multiple objects editing mode is not supported in this feature.
     objs = common.get_uv_editable_objects(context)
-    if len(objs) != 1:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if len(objs) != 1 else context.object.mode == 'EDIT'
 
 
 def _is_valid_context_for_apply(context):
@@ -46,14 +39,7 @@ def _is_valid_context_for_apply(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _measure_wsuv_info(obj, calc_method='MESH',
@@ -88,11 +74,7 @@ def _measure_wsuv_info_from_faces(obj, bm, faces, uv_layer, tex_layer,
     if not uv_area:
         return None, mesh_area, None
 
-    if mesh_area == 0.0:
-        density = 0.0
-    else:
-        density = sqrt(uv_area) / sqrt(mesh_area)
-
+    density = 0.0 if mesh_area == 0.0 else sqrt(uv_area) / sqrt(mesh_area)
     return uv_area, mesh_area, density
 
 
@@ -190,12 +172,12 @@ def _get_target_textures(_, __):
     for obj in objs:
         images.extend(common.find_images(obj))
 
-    items = []
-    items.append(("[Average]", "[Average]", "Average of all textures"))
-    items.append(("[Max]", "[Max]", "Max of all textures"))
-    items.append(("[Min]", "[Min]", "Min of all textures"))
-    items.extend([(img.name, img.name, "") for img in images])
-    return items
+    return [
+        ("[Average]", "[Average]", "Average of all textures"),
+        ("[Max]", "[Max]", "Max of all textures"),
+        ("[Min]", "[Min]", "Min of all textures"),
+        *[(img.name, img.name, "") for img in images],
+    ]
 
 
 @PropertyClassRegistry()
@@ -497,9 +479,7 @@ class MUV_OT_WorldScaleUV_ApplyManual(bpy.types.Operator):
                 bm.faces.ensure_lookup_table()
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
             tex_layer = common.find_texture_layer(bm)
@@ -515,9 +495,7 @@ class MUV_OT_WorldScaleUV_ApplyManual(bpy.types.Operator):
                     tex_selection_method='USER_SPECIFIED', tex_size=tex_size)
 
                 if not uv_area:
-                    self.report({'WARNING'},
-                                "Object {} must have more than one UV map"
-                                .format(obj.name))
+                    self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                     return {'CANCELLED'}
 
                 tgt_density = self.tgt_density
@@ -527,9 +505,7 @@ class MUV_OT_WorldScaleUV_ApplyManual(bpy.types.Operator):
                 factors.append(factor)
 
             bmesh.update_edit_mesh(obj.data)
-            self.report({'INFO'},
-                        "Scaling factor of object {}: {}"
-                        .format(obj.name, factors))
+            self.report({'INFO'}, f"Scaling factor of object {obj.name}: {factors}")
 
         return {'FINISHED'}
 
@@ -667,9 +643,7 @@ class MUV_OT_WorldScaleUV_ApplyScalingDensity(bpy.types.Operator):
                 bm.faces.ensure_lookup_table()
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
             tex_layer = common.find_texture_layer(bm)
@@ -698,9 +672,10 @@ class MUV_OT_WorldScaleUV_ApplyScalingDensity(bpy.types.Operator):
                         tex_size=tgt_texture.size)
 
                 if not uv_area:
-                    self.report({'WARNING'},
-                                "Object {} must have more than one UV map and "
-                                "texture".format(obj.name))
+                    self.report(
+                        {'WARNING'},
+                        f"Object {obj.name} must have more than one UV map and texture",
+                    )
                     return {'CANCELLED'}
 
                 tgt_density = self.src_density * self.tgt_scaling_factor
@@ -710,9 +685,7 @@ class MUV_OT_WorldScaleUV_ApplyScalingDensity(bpy.types.Operator):
                 factors.append(factor)
 
             bmesh.update_edit_mesh(obj.data)
-            self.report({'INFO'},
-                        "Scaling factor of object {}: {}"
-                        .format(obj.name, factors))
+            self.report({'INFO'}, f"Scaling factor of object {obj.name}: {factors}")
 
         return {'FINISHED'}
 
@@ -737,16 +710,16 @@ class MUV_OT_WorldScaleUV_ApplyScalingDensity(bpy.types.Operator):
         layout.separator()
 
     def invoke(self, context, _):
-        sc = context.scene
-
         if self.show_dialog:
             wm = context.window_manager
 
             if self.same_density:
                 self.tgt_scaling_factor = 1.0
             else:
+                sc = context.scene
+
                 self.tgt_scaling_factor = \
-                    sc.muv_world_scale_uv_tgt_scaling_factor
+                        sc.muv_world_scale_uv_tgt_scaling_factor
                 self.src_density = sc.muv_world_scale_uv_src_density
 
             return wm.invoke_props_dialog(self)
@@ -872,9 +845,7 @@ class MUV_OT_WorldScaleUV_ApplyProportionalToMesh(bpy.types.Operator):
                 bm.faces.ensure_lookup_table()
 
             if not bm.loops.layers.uv:
-                self.report({'WARNING'},
-                            "Object {} must have more than one UV map"
-                            .format(obj.name))
+                self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                 return {'CANCELLED'}
             uv_layer = bm.loops.layers.uv.verify()
             tex_layer = common.find_texture_layer(bm)
@@ -885,30 +856,31 @@ class MUV_OT_WorldScaleUV_ApplyProportionalToMesh(bpy.types.Operator):
             for faces in faces_list:
                 if self.tgt_texture == "[Average]":
                     uv_area, mesh_area, density = \
-                        _measure_wsuv_info_from_faces(
+                            _measure_wsuv_info_from_faces(
                             obj, bm, faces, uv_layer, tex_layer,
                             tex_selection_method='AVERAGE')
                 elif self.tgt_texture == "[Max]":
                     uv_area, mesh_area, density = \
-                        _measure_wsuv_info_from_faces(
+                            _measure_wsuv_info_from_faces(
                             obj, bm, faces, uv_layer, tex_layer,
                             tex_selection_method='MAX')
                 elif self.tgt_texture == "[Min]":
                     uv_area, mesh_area, density = \
-                        _measure_wsuv_info_from_faces(
+                            _measure_wsuv_info_from_faces(
                             obj, bm, faces, uv_layer, tex_layer,
                             tex_selection_method='MIN')
                 else:
                     tgt_texture = bpy.data.images[self.tgt_texture]
                     uv_area, mesh_area, density = \
-                        _measure_wsuv_info_from_faces(
+                            _measure_wsuv_info_from_faces(
                             obj, bm, faces, uv_layer, tex_layer,
                             tex_selection_method='USER_SPECIFIED',
                             tex_size=tgt_texture.size)
                 if not uv_area:
-                    self.report({'WARNING'},
-                                "Object {} must have more than one UV map and "
-                                "texture".format(obj.name))
+                    self.report(
+                        {'WARNING'},
+                        f"Object {obj.name} must have more than one UV map and texture",
+                    )
                     return {'CANCELLED'}
 
                 tgt_density = self.src_density * sqrt(mesh_area) / sqrt(
@@ -919,9 +891,7 @@ class MUV_OT_WorldScaleUV_ApplyProportionalToMesh(bpy.types.Operator):
                 factors.append(factor)
 
             bmesh.update_edit_mesh(obj.data)
-            self.report({'INFO'},
-                        "Scaling factor of object {}: {}"
-                        .format(obj.name, factors))
+            self.report({'INFO'}, f"Scaling factor of object {obj.name}: {factors}")
 
         return {'FINISHED'}
 

@@ -20,10 +20,7 @@ def _is_valid_context(context):
     # 'IMAGE_EDITOR' and 'VIEW_3D' space is allowed to execute.
     # If 'View_3D' space is not allowed, you can't find option in Tool-Shelf
     # after the execution
-    if not common.is_valid_space(context, ['IMAGE_EDITOR', 'VIEW_3D']):
-        return False
-
-    return True
+    return bool(common.is_valid_space(context, ['IMAGE_EDITOR', 'VIEW_3D']))
 
 
 @PropertyClassRegistry()
@@ -44,15 +41,8 @@ class _Properties:
                     bd_size = [1.0, 1.0]
             loc = space.cursor_location
 
-            if bd_size[0] < 0.000001:
-                cx = 0.0
-            else:
-                cx = loc[0] / bd_size[0]
-            if bd_size[1] < 0.000001:
-                cy = 0.0
-            else:
-                cy = loc[1] / bd_size[1]
-
+            cx = 0.0 if bd_size[0] < 0.000001 else loc[0] / bd_size[0]
+            cy = 0.0 if bd_size[1] < 0.000001 else loc[1] / bd_size[1]
             self['muv_align_uv_cursor_cursor_loc'] = Vector((cx, cy))
             return self.get('muv_align_uv_cursor_cursor_loc', (0.0, 0.0))
 
@@ -153,9 +143,7 @@ class MUV_OT_AlignUVCursor(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def draw(self, _):
         layout = self.layout
@@ -176,11 +164,10 @@ class MUV_OT_AlignUVCursor(bpy.types.Operator):
                                           'IMAGE_EDITOR')
         if compat.check_version(2, 80, 0) < 0:
             bd_size = common.get_uvimg_editor_board_size(area)
+        elif space.uv_editor.show_pixel_coords:
+            bd_size = common.get_uvimg_editor_board_size(area)
         else:
-            if space.uv_editor.show_pixel_coords:
-                bd_size = common.get_uvimg_editor_board_size(area)
-            else:
-                bd_size = [1.0, 1.0]
+            bd_size = [1.0, 1.0]
 
         large_value = 1e7
         if self.base == 'UV':

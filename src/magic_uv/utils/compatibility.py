@@ -17,20 +17,18 @@ def check_version(major, minor, _):
         return 0
     if bpy.app.version[0] > major:
         return 1
-    if bpy.app.version[1] > minor:
-        return 1
-    return -1
+    return 1 if bpy.app.version[1] > minor else -1
 
 
 def make_annotations(cls):
     if check_version(2, 80, 0) < 0:
         return cls
 
-    # make annotation from attributes
-    props = {k: v
-             for k, v in cls.__dict__.items()
-             if isinstance(v, getattr(bpy.props, '_PropertyDeferred', tuple))}
-    if props:
+    if props := {
+        k: v
+        for k, v in cls.__dict__.items()
+        if isinstance(v, getattr(bpy.props, '_PropertyDeferred', tuple))
+    }:
         if '__annotations__' not in cls.__dict__:
             setattr(cls, '__annotations__', {})
         annotations = cls.__dict__['__annotations__']
@@ -55,10 +53,7 @@ class ChangeRegionType:
 
 
 def matmul(m1, m2):
-    if check_version(2, 80, 0) < 0:
-        return m1 * m2
-
-    return m1 @ m2
+    return m1 * m2 if check_version(2, 80, 0) < 0 else m1 @ m2
 
 
 def layout_split(layout, factor=0.0, align=False):
@@ -76,10 +71,7 @@ def get_user_preferences(context):
 
 
 def get_object_select(obj):
-    if check_version(2, 80, 0) < 0:
-        return obj.select
-
-    return obj.select_get()
+    return obj.select if check_version(2, 80, 0) < 0 else obj.select_get()
 
 
 def set_object_select(obj, select):
@@ -120,11 +112,7 @@ def get_object_uv_layers(obj):
 
 
 def icon(icon):
-    if icon == 'IMAGE':
-        if check_version(2, 80, 0) < 0:
-            return 'IMAGE_COL'
-
-    return icon
+    return 'IMAGE_COL' if icon == 'IMAGE' and check_version(2, 80, 0) < 0 else icon
 
 
 def get_all_space_types():

@@ -132,10 +132,7 @@ class TestCopyPasteUVObject(common.TestBase):
         bm = bmesh.from_edit_mesh(self.active_obj.data)
         bpy.ops.mesh.select_all(action='DESELECT')
         for i, f in enumerate(bm.faces):
-            if i <= 5:
-                f.select = True
-            else:
-                f.select = False
+            f.select = i <= 5
         bpy.ops.mesh.delete(type='FACE')
         bpy.ops.object.mode_set(mode='OBJECT')
         result = bpy.ops.object.muv_copy_paste_uv_object_paste_uv()

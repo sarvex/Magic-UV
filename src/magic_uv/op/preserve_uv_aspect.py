@@ -22,14 +22,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -112,9 +105,7 @@ class MUV_OT_PreserveUVAspect(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return True
-        return _is_valid_context(context)
+        return True if common.is_console_mode() else _is_valid_context(context)
 
     def execute(self, context):
         # Note: the current system only works if the
@@ -137,9 +128,8 @@ class MUV_OT_PreserveUVAspect(bpy.types.Operator):
                     if len(nodes) >= 2:
                         self.report(
                             {'WARNING'},
-                            "Object {} must not have more than 2 "
-                            "shader nodes with image texture"
-                            .format(obj.name))
+                            f"Object {obj.name} must not have more than 2 shader nodes with image texture",
+                        )
                         return {'CANCELLED'}
                     if not nodes:
                         continue
@@ -148,16 +138,14 @@ class MUV_OT_PreserveUVAspect(bpy.types.Operator):
                 if len(material_to_rewrite) >= 2:
                     self.report(
                         {'WARNING'},
-                        "Object {} must not have more than 2 "
-                        "materials with image texture"
-                        .format(obj.name))
+                        f"Object {obj.name} must not have more than 2 materials with image texture",
+                    )
                     return {'CANCELLED'}
-                if len(material_to_rewrite) == 0:
+                if not material_to_rewrite:
                     self.report(
                         {'WARNING'},
-                        "Object {} must not have more than 1 "
-                        "material with image texture"
-                        .format(obj.name))
+                        f"Object {obj.name} must not have more than 1 material with image texture",
+                    )
                     return {'CANCELLED'}
                 if material_to_rewrite[0] not in obj_list.keys():
                     obj_list[material_to_rewrite[0]] = []
@@ -191,18 +179,16 @@ class MUV_OT_PreserveUVAspect(bpy.types.Operator):
                     tex_image = common.find_image(obj)
                     for f in sel_faces:
                         if tex_image not in info.keys():
-                            info[tex_image] = {}
-                            info[tex_image]['faces'] = []
+                            info[tex_image] = {'faces': []}
                         info[tex_image]['faces'].append(f)
                 else:
                     tex_layer = bm.faces.layers.tex.verify()
                     for f in sel_faces:
-                        if not f[tex_layer].image in info.keys():
-                            info[f[tex_layer].image] = {}
-                            info[f[tex_layer].image]['faces'] = []
+                        if f[tex_layer].image not in info:
+                            info[f[tex_layer].image] = {'faces': []}
                         info[f[tex_layer].image]['faces'].append(f)
 
-                for img in info:
+                for img, value in info.items():
                     if img is None:
                         continue
 
@@ -214,7 +200,7 @@ class MUV_OT_PreserveUVAspect(bpy.types.Operator):
                     if self.origin == 'CENTER':
                         origin = Vector((0.0, 0.0))
                         num = 0
-                        for f in info[img]['faces']:
+                        for f in value['faces']:
                             for l in f.loops:
                                 uv = l[uv_layer].uv
                                 origin = origin + uv
@@ -295,11 +281,11 @@ class MUV_OT_PreserveUVAspect(bpy.types.Operator):
                     info[img]['ratio'] = ratio
                     info[img]['origin'] = origin
 
-                for img in info:
+                for img, value_ in info.items():
                     if img is None:
                         continue
 
-                    for f in info[img]['faces']:
+                    for f in value_['faces']:
                         if compat.check_version(2, 80, 0) < 0:
                             tex_layer = bm.faces.layers.tex.verify()
                             f[tex_layer].image = dest_img

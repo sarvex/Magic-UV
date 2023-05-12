@@ -61,19 +61,18 @@ def _get_canvas(context):
         ratio_x = canvas_w / tex_w
         ratio_y = canvas_h / tex_h
         if sc.muv_texture_projection_apply_tex_aspect:
-            ratio = ratio_y if ratio_x > ratio_y else ratio_x
+            ratio = min(ratio_x, ratio_y)
             len_x = ratio * tex_w
             len_y = ratio * tex_h
         else:
             len_x = canvas_w
             len_y = canvas_h
+    elif sc.muv_texture_projection_apply_tex_aspect:
+        len_x = tex_w
+        len_y = tex_h
     else:
-        if sc.muv_texture_projection_apply_tex_aspect:
-            len_x = tex_w
-            len_y = tex_h
-        else:
-            len_x = region_w
-            len_y = region_h
+        len_x = region_w
+        len_y = region_h
 
     x0 = int(center_x - len_x * 0.5)
     y0 = int(center_y - len_y * 0.5)
@@ -139,14 +138,7 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 @PropertyClassRegistry()
@@ -260,9 +252,7 @@ class MUV_OT_TextureProjection(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         # we can not get area/space/region from console
-        if common.is_console_mode():
-            return False
-        return _is_valid_context(context)
+        return False if common.is_console_mode() else _is_valid_context(context)
 
     @classmethod
     def is_running(cls, _):
@@ -398,14 +388,11 @@ class MUV_OT_TextureProjection_Project(bpy.types.Operator):
             if common.check_version(2, 73, 0) >= 0:
                 bm.faces.ensure_lookup_table()
 
-            # get UV and texture layer
             if not bm.loops.layers.uv:
                 if sc.muv_texture_projection_assign_uvmap:
                     bm.loops.layers.uv.new()
                 else:
-                    self.report({'WARNING'},
-                                "Object {} must have more than one UV map"
-                                .format(obj.name))
+                    self.report({'WARNING'}, f"Object {obj.name} must have more than one UV map")
                     return {'CANCELLED'}
 
             uv_layer = bm.loops.layers.uv.verify()
@@ -462,13 +449,13 @@ class MUV_OT_TextureProjection_Project(bpy.types.Operator):
                 else:
                     tex_node = node_tree.nodes.new(type="ShaderNodeTexImage")
                 tex_node.image = \
-                    bpy.data.images[sc.muv_texture_projection_tex_image]
+                        bpy.data.images[sc.muv_texture_projection_tex_image]
                 node_tree.links.new(
                     output_node.inputs["Surface"], tex_node.outputs["Color"])
             else:
                 for f in sel_faces:
                     f[tex_layer].image = \
-                        bpy.data.images[sc.muv_texture_projection_tex_image]
+                            bpy.data.images[sc.muv_texture_projection_tex_image]
 
             # project texture to object
             i = 0

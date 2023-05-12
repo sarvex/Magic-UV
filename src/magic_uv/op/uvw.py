@@ -29,18 +29,10 @@ def _is_valid_context(context):
         return False
 
     objs = common.get_uv_editable_objects(context)
-    if not objs:
-        return False
-
-    # only edit mode is allowed to execute
-    if context.object.mode != 'EDIT':
-        return False
-
-    return True
+    return False if not objs else context.object.mode == 'EDIT'
 
 
 def _get_uv_layer(ops_obj, bm, assign_uvmap):
-    # get UV layer
     if not bm.loops.layers.uv:
         if assign_uvmap:
             bm.loops.layers.uv.new()
@@ -48,9 +40,7 @@ def _get_uv_layer(ops_obj, bm, assign_uvmap):
             ops_obj.report({'WARNING'},
                            "Object must have more than one UV map")
             return None
-    uv_layer = bm.loops.layers.uv.verify()
-
-    return uv_layer
+    return bm.loops.layers.uv.verify()
 
 
 def _apply_box_map(bm, uv_layer, size, offset, rotation,
